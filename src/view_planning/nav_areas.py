@@ -29,20 +29,19 @@ class NavArea():
 
 
 class NavAreaGenerator():
-    def __init__(self):
-        pass
-
-    # gets a soma roi, turns it into a polygon and then a navarea #
-    def generate_from_soma_roi(self,roi_id):
+    def __init__(self,roi_id):
+        self.roi_id = roi_id
         soma_query = rospy.ServiceProxy('soma/query_rois',SOMAQueryROIs)
         query = SOMAQueryROIsRequest()
         query.returnmostrecent = True
-        query.roiids = [roi_id]
+        query.roiids = [self.roi_id]
         response = soma_query(query)
-
         ## get the latest version of the roi specified by roi_id ##
-        roi = response.rois[-1]
-        points = roi.posearray.poses
+        self.roi = response.rois[-1]
+
+    # gets a soma roi, turns it into a polygon and then a navarea #
+    def generate_from_soma_roi(self):
+        points = self.roi.posearray.poses
         points_2d = []
         for point in points:
             points_2d.append([point.position.x,point.position.y])
@@ -51,10 +50,10 @@ class NavAreaGenerator():
             return None
         polygon = Polygon(points_2d)
         na = NavArea(polygon)
-        na.roi_id = roi_id
+        na.roi_id = self.roi_id
         return na
 
 if __name__ == '__main__':
-    n = NavAreaGenerator()
-    na = n.generate_from_soma_roi("2")
-    print(na.get_random_point_in_area())
+    n = NavAreaGenerator("2")
+    na = n.generate_from_soma_roi()
+    print(na.get_random_points_in_area()[0])

@@ -110,16 +110,16 @@ class ViewFrustum(shapely.geometry.Polygon):
         #v.tilt(5)
         #print(v.contains(b))
         pts = []
-        for k in v.exterior.coords:
+        for k in self.exterior.coords:
             p = geometry_msgs.msg.Point()
             p.x = k[0]
             p.y = k[1]
             p.z = k[2]
 
             o = geometry_msgs.msg.Point()
-            o.x = v.origin[0]
-            o.y = v.origin[1]
-            o.z = v.origin[2]
+            o.x = self.origin[0]
+            o.y = self.origin[1]
+            o.z = self.origin[2]
             points_list.points.append(o)
             points_list.points.append(p)
             pts.append(p)
