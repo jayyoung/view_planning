@@ -21,17 +21,14 @@ class RobotViewState():
         pass
 
     def generate_random(self,nav_area_generator):
+        rospy.loginfo("-- Generating View --")
         pt = nav_area_generator.get_random_points_in_area()[0]
 
         origin = [pt.x,pt.y,1.75]
         width = 0.7
         height = 0.7
         length = 1.5
-        v = ViewFrustum(origin,[origin,
-        (origin[0]+length,origin[1]+width,origin[2]+height),
-        (origin[0]+length,origin[1]+-width,origin[2]+-height),
-        (origin[0]+length,origin[1]+width,origin[2]+-height),
-        (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+
 
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
@@ -42,21 +39,26 @@ class RobotViewState():
         qt = geometry_msgs.msg.Quaternion()
         yaw = random.uniform(0, 2*math.pi)
         deg = math.degrees(yaw)
+
+        v = ViewFrustum(origin,[origin,
+        (origin[0]+length,origin[1]+width,origin[2]+height),
+        (origin[0]+length,origin[1]+-width,origin[2]+-height),
+        (origin[0]+length,origin[1]+width,origin[2]+-height),
+        (origin[0]+length,origin[1]+(-width),origin[2]+height)],deg)
+
+
         q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
         ps.pose.orientation.x = q[0]
         ps.pose.orientation.y = q[1]
         ps.pose.orientation.z = q[2]
         ps.pose.orientation.w = q[3]
-
-        v.pan(deg)
-
         # returns the posestamped and the frsutrum polygon #
         return ps,v
 
 
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
-    n = NavAreaGenerator("2")
+    n = NavAreaGenerator("2",0.4)
     na = n.generate_from_soma_roi()
 
 
@@ -64,9 +66,7 @@ if __name__ == '__main__':
     marker_publisher = rospy.Publisher("/frust_points", Marker,queue_size=5)
     pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
-    for k in range(20):
-
-        print("uhh")
+    for k in range(5):
         view = RobotViewState()
         pose,frustrum = view.generate_random(na)
 
@@ -79,9 +79,9 @@ if __name__ == '__main__':
         centroid_marker.pose.position.x = pose.pose.position.x
         centroid_marker.pose.position.y = pose.pose.position.y
         centroid_marker.pose.position.z = 1.75
-        centroid_marker.scale.x = 0.5
-        centroid_marker.scale.y = 0.5
-        centroid_marker.scale.z = 0.5
+        centroid_marker.scale.x = n.inflation_radius
+        centroid_marker.scale.y = n.inflation_radius
+        centroid_marker.scale.z = n.inflation_radius
         centroid_marker.color.a = 1.0
         centroid_marker.color.r = 0.0
         centroid_marker.color.g = 1.0

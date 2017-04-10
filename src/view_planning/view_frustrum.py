@@ -57,12 +57,17 @@ def pan(frust,angle):
     return new
 
 class ViewFrustum(shapely.geometry.Polygon):
-    def __init__(self,origin,vertices):
+    def __init__(self,origin,vertices,default_pan_angle=0,default_tilt_angle=0):
         super(ViewFrustum,self).__init__(vertices)
         self.origin = origin
+        self.pan(default_pan_angle)
+        self.tilt(default_tilt_angle)
+        self.pan_angle = 0
+        self.tilt_angle = 0
 
     def pan(self,angle):
         new_coords = []
+        self.pan_angle = angle
         for k in self.exterior.coords:
             x = k[0]
             y = k[1]
@@ -80,6 +85,7 @@ class ViewFrustum(shapely.geometry.Polygon):
 
     def tilt(self,angle):
         new_coords = []
+        self.tilt_angle = angle
         for k in self.exterior.coords:
             x = k[0]
             y = k[1]
