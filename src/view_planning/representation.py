@@ -20,20 +20,31 @@ class RobotViewState():
     def __init__(self):
         pass
 
-    def generate_random(self,nav_area_generator):
-        rospy.loginfo("-- Generating View --")
-        pt = nav_area_generator.get_random_points_in_area()[0]
+    def generate_from_data(self,position,orientation,pan,tilt):
+        origin = [position[0],position[1],position[2]]
+        width = 0.7
+        height = 0.7
+        length = 1.5
+        ps = geometry_msgs.msg.PoseStamped()
+        ps.header.frame_id = "/map"
+        ps.pose.position.x = position[0]
+        ps.pose.position.y = position[1]
+        ps.pose.position.z = position[2]
 
-        origin = [pt.x,pt.y,1.75]
+
+    def generate_random(self,nav_area_generator):
+        #rospy.loginfo("-- Generating View --")
+        self.view_pose = nav_area_generator.get_random_points_in_area()[0]
+
+        origin = [self.view_pose.x,self.view_pose.y,1.75]
         width = 0.7
         height = 0.7
         length = 1.5
 
-
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
-        ps.pose.position.x = pt.x
-        ps.pose.position.y = pt.y
+        ps.pose.position.x =self.view_pose.x
+        ps.pose.position.y =self.view_pose.y
         ps.pose.position.z = 1.75
 
         qt = geometry_msgs.msg.Quaternion()
@@ -46,7 +57,6 @@ class RobotViewState():
         (origin[0]+length,origin[1]+width,origin[2]+-height),
         (origin[0]+length,origin[1]+(-width),origin[2]+height)],deg)
 
-
         q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
         ps.pose.orientation.x = q[0]
         ps.pose.orientation.y = q[1]
@@ -54,6 +64,55 @@ class RobotViewState():
         ps.pose.orientation.w = q[3]
         # returns the posestamped and the frsutrum polygon #
         return ps,v
+
+class ViewFitnessEvaluator():
+    def __init__(self):
+        # calculates for some given view parameters
+        # what the overlap is with the voxel map as a proportion of possible
+        # distance from voxel centroid
+        # other things? like if the view is in a tabu region?
+
+        pass
+    def evaluate(self,view,vmap):
+        # calculate how well this view overlaps the points in the map #
+        frust = view[-1]['frust']
+        pose = view[-1]['pose']
+
+        overlapping_points = 0
+        for point in vmap.points:
+            if(frust.contains(Point(point))):
+                overlapping_points+=1
+        degree_of_overlap = overlapping_points/len(vmap.points)
+
+        # calculate the robot distance of this view from the centroid of the map #
+        points = np.asarray(vmap.points)
+        length = points.shape[0]
+        sum_x = np.sum(points[:, 0])
+        sum_y = np.sum(points[:, 1])
+        sum_z = np.sum(points[:, 2])
+        centroid = np.asarray([sum_x/length, sum_y/length, sum_z/length])
+        cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
+        dist_to_centroid = np.linalg.norm(centroid-cp)
+        return degree_of_overlap,dist_to_centroid
+
+
+
+
+class VoxelMap():
+    def __init__(self):
+        # the segmented objects #
+        # should alow us to access each point
+        # and tell us what the centroid of the map is
+        self.points = []
+        pass
+
+    def generate_from_octomap(self,octomap):
+        pass
+
+    def generate_dummy(self,pos):
+        p = [pos[0],pos[1],pos[2]]
+        self.points.append(p)
+
 
 
 if __name__ == '__main__':

@@ -27,7 +27,7 @@ class NavArea():
              c = p.buffer(self.generator.inflation_radius)
              if self.polygon.contains(c):
                 add = True
-                print("CIRCLE")
+                #print("CIRCLE")
                 for k in c.exterior.coords:
                      grid_x = int((k[0] - self.generator.costmap.info.origin.position.x) / self.generator.costmap.info.resolution)
                      grid_y = int((k[1] - self.generator.costmap.info.origin.position.y) / self.generator.costmap.info.resolution)
