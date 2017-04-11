@@ -75,14 +75,14 @@ class ViewFitnessEvaluator():
         pass
     def evaluate(self,view,vmap):
         # calculate how well this view overlaps the points in the map #
-        frust = view[-1]['frust']
-        pose = view[-1]['pose']
+        frust = view[0]
+        pose = view[1]
 
         overlapping_points = 0
         for point in vmap.points:
             if(frust.contains(Point(point))):
                 overlapping_points+=1
-        degree_of_overlap = overlapping_points/len(vmap.points)
+        degree_of_overlap = float(overlapping_points)/float(len(vmap.points))
 
         # calculate the robot distance of this view from the centroid of the map #
         points = np.asarray(vmap.points)
@@ -91,9 +91,12 @@ class ViewFitnessEvaluator():
         sum_y = np.sum(points[:, 1])
         sum_z = np.sum(points[:, 2])
         centroid = np.asarray([sum_x/length, sum_y/length, sum_z/length])
+        centroid_point = Point(centroid)
+
         cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
         dist_to_centroid = np.linalg.norm(centroid-cp)
-        return degree_of_overlap,dist_to_centroid
+    #    rospy.loginfo([degree_of_overlap,dist_to_centroid])
+        return degree_of_overlap,dist_to_centroid,frust.pan_angle
 
 
 
@@ -128,7 +131,7 @@ if __name__ == '__main__':
     for k in range(5):
         view = RobotViewState()
         pose,frustrum = view.generate_random(na)
-
+        frustrum.pan(90)
         pose_publisher.publish(pose)
 
         centroid_marker = Marker()
@@ -150,4 +153,4 @@ if __name__ == '__main__':
 
         marker_publisher.publish(frustrum.get_visualisation())
 
-        rospy.sleep(2)
+        rospy.sleep(1)

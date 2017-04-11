@@ -7,6 +7,7 @@ import roslib
 import rospy
 from visualization_msgs.msg import Marker,MarkerArray
 import geometry_msgs
+import copy
 
 class BinaryPoint(shapely.geometry.Point):
     def __init__(self,pos):
@@ -57,13 +58,20 @@ def pan(frust,angle):
     return new
 
 class ViewFrustum(shapely.geometry.Polygon):
+
     def __init__(self,origin,vertices,default_pan_angle=0,default_tilt_angle=0):
         super(ViewFrustum,self).__init__(vertices)
+        self.raw_vertices = vertices
         self.origin = origin
+        self.init_tilt_angle = default_tilt_angle
+        self.init_pan_angle = default_pan_angle
         self.pan(default_pan_angle)
         self.tilt(default_tilt_angle)
         self.pan_angle = 0
         self.tilt_angle = 0
+
+    def __deepcopy__(self, memo):
+        return ViewFrustum(copy.deepcopy(self.origin),copy.deepcopy(self.raw_vertices),copy.deepcopy(self.init_pan_angle),copy.deepcopy(self.init_tilt_angle))
 
     def pan(self,angle):
         new_coords = []

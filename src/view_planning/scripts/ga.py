@@ -6,6 +6,7 @@ from deap import tools
 from deap import algorithms
 
 import numpy as np
+import sys
 
 def evaluate(ind):
     # Do some hard computing on the individual
@@ -18,7 +19,7 @@ def evaluate(ind):
 class ViewIndividual(list):
     def __init__(self, *args):
         list.__init__(self, *args)
-
+        #self.fitness = creator.FitnessMulti
         # fitness of individual #
         # number of points visible in view 1 (COVERAGE/POSSIBLE COVERAGE)
         # distance of view 1 to centroid of octomap
@@ -32,18 +33,21 @@ class ViewIndividual(list):
         # distance of view 3 to centroid of octomap
         # nav distance from view 2 to view 3
 
+def gen_vi():
+    return [random.randint(0,9),random.randint(0,9),random.randint(0,9)]
+
 
 if __name__ == '__main__':
 
     IND_SIZE = 3
-    CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 250, 100
+    CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 5, 15
 
     creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0, -1.0))
     creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
     toolbox = base.Toolbox()
-    toolbox.register("attr_float", random.random)
-    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=IND_SIZE)
+    toolbox.register("attr_float", gen_vi)
+    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.attr_float)
     toolbox.register("population", tools.initRepeat, ViewIndividual, toolbox.individual)
 
     toolbox.register("evaluate", evaluate)
@@ -55,8 +59,17 @@ if __name__ == '__main__':
 
     # Evaluate the entire population
     fitnesses = list(map(toolbox.evaluate, pop))
+    print("INITIAL FITNESSES")
     for ind, fit in zip(pop, fitnesses):
+        print(ind)
         ind.fitness.values = fit
+
+
+    print("TOP TEN:")
+    top_ten = toolbox.select(pop, 10)
+    for k in top_ten:
+        print(k.fitness)
+    sys.exit()
 
     print("  Evaluated %i individuals" % len(pop))
 
@@ -67,6 +80,9 @@ if __name__ == '__main__':
         offspring = toolbox.select(pop, len(pop))
         # Clone the selected individuals
         offspring = list(map(toolbox.clone, offspring))
+        for k in offspring:
+            print(k.fitness.values)
+    #    break
 
         # Apply crossover and mutation on the offspring
         for child1, child2 in zip(offspring[::2], offspring[1::2]):
