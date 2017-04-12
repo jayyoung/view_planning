@@ -50,14 +50,86 @@ class ViewSequenceOptimiser():
         robot_pose,frust = dv.generate_random(self.nav_area)
         return [frust,robot_pose]
 
-    def mutate_view(self,view):
+    def mutate_view(self,ind):
         pan_new = random.randint(-45,45)
-        if((view[0].pan_angle+pan_new) > 45 or (view[0].pan_angle+pan_new) < -45):
-            return view
-        print("PANNING WITH: " + str(pan_new))
-        print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
-        view[0].pan(pan_new)
-        return view
+        if((ind[0].pan_angle+pan_new) > 45 or (ind[0].pan_angle+pan_new) < -45):
+            return ind
+        #print("PANNING WITH: " + str(pan_new))
+        #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
+        ind[0].pan(pan_new)
+        return ind
+
+    def mutate_pose(self,ind):
+        mutation_intensity = 6
+        nx = ind[1].pose.position.x+random.uniform(-mutation_intensity,mutation_intensity)
+        ny = ind[1].pose.position.y+random.uniform(-mutation_intensity,mutation_intensity)
+        nz = ind[1].pose.position.z
+        (minx, miny, maxx, maxy) = self.nav_area.polygon.bounds
+        max_retries = 5
+        while(True):
+            if(max_retries <= 0):
+                #print("FAILURE")
+                return ind
+            else:
+                max_retries-=1
+            p = Point(nx,ny)
+            if(self.nav_area.polygon.contains(p)):
+                add = True
+                #print("CIRCLE")
+                c = p.buffer(self.nav_area.generator.inflation_radius)
+                for k in c.exterior.coords:
+                     grid_x = int((k[0] - self.nav_area.generator.costmap.info.origin.position.x) / self.nav_area.generator.costmap.info.resolution)
+                     grid_y = int((k[1] - self.nav_area.generator.costmap.info.origin.position.y) / self.nav_area.generator.costmap.info.resolution)
+                     costmap_point = self.nav_area.generator.costmap.data[grid_x + self.nav_area.generator.costmap.info.width * grid_y]
+                     if(costmap_point != 0):
+                        # print("NO GOOD")
+                         add = False
+                         break
+                if(add):
+                    break
+            else:
+                nx = ind[1].pose.position.x+random.uniform(-mutation_intensity,mutation_intensity)
+                ny = ind[1].pose.position.y+random.uniform(-mutation_intensity,mutation_intensity)
+                nz = ind[1].pose.position.z
+
+        #print("SUCCESS!")
+        int_frust_pan = ind[0].pan_angle
+        origin = [nx,ny,1.75]
+        width = 0.7
+        height = 0.7
+        length = 2
+        ps = geometry_msgs.msg.PoseStamped()
+        ps.header.frame_id = "/map"
+        ps.pose.position.x =nx
+        ps.pose.position.y =ny
+        ps.pose.position.z = 1.75
+
+        qt = geometry_msgs.msg.Quaternion()
+        yaw = random.uniform(0, 2*math.pi)
+        deg = math.degrees(yaw)
+        tlt = 0
+
+        v = ViewFrustum(origin,[origin,
+        (origin[0]+length,origin[1]+width,origin[2]+height),
+        (origin[0]+length,origin[1]+-width,origin[2]+-height),
+        (origin[0]+length,origin[1]+width,origin[2]+-height),
+        (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+        v.pan(deg)
+        v.pan_angle = 0
+        v.tilt_angle = 0
+        v.pan(int_frust_pan)
+
+        q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
+        ps.pose.orientation.x = q[0]
+        ps.pose.orientation.y = q[1]
+        ps.pose.orientation.z = q[2]
+        ps.pose.orientation.w = q[3]
+        # returns the posestamped and the frsutrum polygon #
+        ind[0] = v
+        ind[1] = ps
+        return ind
+
+
 
     def evaluate_view(self,individual):
         return self.fitness_evaluator.evaluate(individual,self.voxel_map)
@@ -71,10 +143,10 @@ class ViewSequenceOptimiser():
         pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 250, 500
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 250, 1000
 
 
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0, -1.0))
+        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.8, -1.0))
         creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
 
@@ -88,7 +160,8 @@ class ViewSequenceOptimiser():
         rospy.loginfo("Setting Up Operators")
         toolbox.register("evaluate", self.evaluate_view)
         toolbox.register("select", tools.selBest)
-        toolbox.register("mutate", self.mutate_view)
+        toolbox.register("mutate_view", self.mutate_view)
+        toolbox.register("mutate_pose", self.mutate_pose)
         rospy.loginfo("Done")
         rospy.loginfo("Creating initial population and evaluating its fitness")
 
@@ -101,10 +174,10 @@ class ViewSequenceOptimiser():
             ind.fitness.values = fit
 
 
-        print("TOP TEN:")
-        top_ten = toolbox.select(pop, 100)
-        for k in top_ten:
-            print(k.fitness)
+        #print("TOP TEN:")
+        #top_ten = toolbox.select(pop, 100)
+        ##for k in top_ten:
+        #    print(k.fitness)
 
         rospy.loginfo("Done")
         rospy.loginfo("-- Beginning Evolutionary Planning -- ")
@@ -122,9 +195,13 @@ class ViewSequenceOptimiser():
             ###################### MUTATION ######################
             for mutant in offspring:
                 if random.random() < MUTPB:
-                    toolbox.mutate(mutant)
+                    #
+                    toolbox.mutate_pose(mutant)
+                    toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
+
+
 
             # Evaluate the individuals with an invalid fitness
             invalid_ind = []
@@ -173,9 +250,11 @@ if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
     vmap = VoxelMap()
-    vmap.generate_dummy([1.222,-2.046,1.6])
+    #vmap.generate_dummy([1.222,-2.046,1.6])
     vmap.generate_dummy([1.121,-1.564,1.6])
-    vmap.generate_dummy([1.263,-2.163,1.6])
+    #vmap.generate_dummy([1.263,-2.163,1.6])
+    vmap.generate_dummy([0.845,-2.106,1.6])
+    vmap.generate_dummy([0.845,-1.406,1.6])
 #    creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
 
 

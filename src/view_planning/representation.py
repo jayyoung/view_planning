@@ -39,7 +39,7 @@ class RobotViewState():
         origin = [self.view_pose.x,self.view_pose.y,1.75]
         width = 0.7
         height = 0.7
-        length = 1.5
+        length = 2
 
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
@@ -68,6 +68,8 @@ class RobotViewState():
         ps.pose.orientation.w = q[3]
         # returns the posestamped and the frsutrum polygon #
         return ps,v
+
+
 
 class ViewFitnessEvaluator():
     def __init__(self):
@@ -100,7 +102,7 @@ class ViewFitnessEvaluator():
         cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
         dist_to_centroid = np.linalg.norm(centroid-cp)
 
-        return degree_of_overlap,dist_to_centroid,frust.pan_angle
+        return degree_of_overlap,dist_to_centroid,abs(frust.pan_angle)
 
 
 
