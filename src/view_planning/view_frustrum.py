@@ -61,21 +61,33 @@ class ViewFrustum(shapely.geometry.Polygon):
 
     def __init__(self,origin,vertices,default_pan_angle=0,default_tilt_angle=0):
         super(ViewFrustum,self).__init__(vertices)
-        self.raw_vertices = vertices
+        self.raw_vertices = vertices # vertices always in defauult, 0,0 pos #
         self.origin = origin
-        self.init_tilt_angle = default_tilt_angle
-        self.init_pan_angle = default_pan_angle
-        self.pan(default_pan_angle)
-        self.tilt(default_tilt_angle)
-        self.pan_angle = 0
-        self.tilt_angle = 0
+        #self.init_tilt_angle = default_tilt_angle
+        #self.init_pan_angle = default_pan_angle
+        self.pan_angle = default_pan_angle
+        self.tilt_angle = default_tilt_angle
+
+        #self.pan(default_pan_angle)
+        #self.tilt(default_tilt_angle)
+
+
 
     def __deepcopy__(self, memo):
-        return ViewFrustum(copy.deepcopy(self.origin),copy.deepcopy(self.raw_vertices),copy.deepcopy(self.init_pan_angle),copy.deepcopy(self.init_tilt_angle))
+        nvs = ViewFrustum(copy.deepcopy(self.origin),copy.deepcopy(self.raw_vertices),copy.deepcopy(self.pan_angle),copy.deepcopy(self.tilt_angle))
+        #nvs.pan_angle = self.pan_angle
+        #nvs.tilt_angle = self.tilt_angle
+        return nvs
 
     def pan(self,angle):
+        #if(angle < 0):
+        #    if(self.pan_angle-angle < -45):
+        #        return
+        #else:
+        #    if(self.pan_angle+angle > 45):
+        #        return
         new_coords = []
-        self.pan_angle = angle
+        self.pan_angle += angle
         for k in self.exterior.coords:
             x = k[0]
             y = k[1]
@@ -89,6 +101,7 @@ class ViewFrustum(shapely.geometry.Polygon):
             p.z = pk.z
             k = (p.x,p.y,p.z)
             new_coords.append(k)
+        self.raw_vertices = new_coords
         super(ViewFrustum,self).__init__(new_coords)
 
     def tilt(self,angle):
@@ -109,7 +122,7 @@ class ViewFrustum(shapely.geometry.Polygon):
             new_coords.append(k)
         super(ViewFrustum,self).__init__(new_coords)
 
-    def get_visualisation(self):
+    def get_visualisation(self,colour=True):
         points_list = Marker()
         points_list.header.frame_id = "/map"
         points_list.type = Marker.LINE_LIST
@@ -117,9 +130,16 @@ class ViewFrustum(shapely.geometry.Polygon):
         points_list.scale.y = 0.1
         points_list.scale.z = 0.1
         points_list.color.a = 1.0
-        points_list.color.r = 0.0
-        points_list.color.g = 0.0
-        points_list.color.b = 1.0
+
+        if(colour):
+            points_list.color.r = 0.0
+            points_list.color.g = 0.0
+            points_list.color.b = 1.0
+        else:
+            points_list.color.r = 1.0
+            points_list.color.g = 0.0
+            points_list.color.b = 0.0
+
         #v.pan(3)
         #v.tilt(5)
         #print(v.contains(b))

@@ -50,12 +50,16 @@ class RobotViewState():
         qt = geometry_msgs.msg.Quaternion()
         yaw = random.uniform(0, 2*math.pi)
         deg = math.degrees(yaw)
+        tlt = 0
 
         v = ViewFrustum(origin,[origin,
         (origin[0]+length,origin[1]+width,origin[2]+height),
         (origin[0]+length,origin[1]+-width,origin[2]+-height),
         (origin[0]+length,origin[1]+width,origin[2]+-height),
-        (origin[0]+length,origin[1]+(-width),origin[2]+height)],deg)
+        (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+        v.pan(deg)
+        v.pan_angle = 0
+        v.tilt_angle = 0
 
         q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
         ps.pose.orientation.x = q[0]
@@ -95,9 +99,8 @@ class ViewFitnessEvaluator():
 
         cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
         dist_to_centroid = np.linalg.norm(centroid-cp)
-    #    rospy.loginfo([degree_of_overlap,dist_to_centroid])
-        return degree_of_overlap,dist_to_centroid,frust.pan_angle
 
+        return degree_of_overlap,dist_to_centroid,frust.pan_angle
 
 
 
@@ -116,7 +119,25 @@ class VoxelMap():
         p = [pos[0],pos[1],pos[2]]
         self.points.append(p)
 
-
+    def get_visualisation(self):
+        centroid_marker = Marker()
+        centroid_marker.header.frame_id = "/map"
+        centroid_marker.type = Marker.SPHERE_LIST
+        centroid_marker.header.stamp = rospy.Time.now()
+        for k in self.points:
+            px = geometry_msgs.msg.Point()
+            px.x = k[0]
+            px.y = k[1]
+            px.z = k[2]
+            centroid_marker.points.append(px)
+        centroid_marker.scale.x = 0.1
+        centroid_marker.scale.y = 0.1
+        centroid_marker.scale.z = 0.1
+        centroid_marker.color.a = 1.0
+        centroid_marker.color.r = 0.0
+        centroid_marker.color.g = 1.0
+        centroid_marker.color.b = 0.0
+        return centroid_marker
 
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)

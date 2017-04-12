@@ -51,7 +51,12 @@ class ViewSequenceOptimiser():
         return [frust,robot_pose]
 
     def mutate_view(self,view):
-        view[0].pan(random.randint(-45,45))
+        pan_new = random.randint(-45,45)
+        if((view[0].pan_angle+pan_new) > 45 or (view[0].pan_angle+pan_new) < -45):
+            return view
+        print("PANNING WITH: " + str(pan_new))
+        print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
+        view[0].pan(pan_new)
         return view
 
     def evaluate_view(self,individual):
@@ -59,27 +64,14 @@ class ViewSequenceOptimiser():
 
     def optimise(self):
 
-        view_root_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
-        centroid_marker = Marker()
-        centroid_marker.header.frame_id = "/map"
-        centroid_marker.type = Marker.SPHERE
-        centroid_marker.header.stamp = rospy.Time.now()
-        centroid_marker.pose.position.x = 1.022
-        centroid_marker.pose.position.y = -2.046
-        centroid_marker.pose.position.z = 1.6
-        centroid_marker.scale.x = 0.2
-        centroid_marker.scale.y = 0.2
-        centroid_marker.scale.z = 0.2
-        centroid_marker.color.a = 1.0
-        centroid_marker.color.r = 0.0
-        centroid_marker.color.g = 1.0
-        centroid_marker.color.b = 0.0
+        target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
+        target_points_publisher.publish(self.voxel_map.get_visualisation())
 
         marker_publisher = rospy.Publisher("/frust_points", Marker,queue_size=5)
         pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 250, 250
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 250, 500
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0, -1.0))
@@ -120,7 +112,7 @@ class ViewSequenceOptimiser():
             print("-- Generation %i --" % g)
 
             # Select the next generation individuals
-            offspring = toolbox.select(pop, 10)
+            offspring = toolbox.select(pop, len(pop))
             # Clone the selected individuals
             offspring = list(map(toolbox.clone, offspring))
             print("cloned pop:")
@@ -157,8 +149,10 @@ class ViewSequenceOptimiser():
             best_ind = tools.selBest(pop, 1)[0]
             print("Fitness values for best of this generation: %s" % list(best_ind.fitness.values))
             pose_publisher.publish(best_ind[1])
+
             marker_publisher.publish(best_ind[0].get_visualisation())
-            view_root_publisher.publish(centroid_marker)
+            target_points_publisher.publish(self.voxel_map.get_visualisation())
+
             #rospy.sleep(0.5)
 
 
@@ -166,15 +160,22 @@ class ViewSequenceOptimiser():
         print("-- End of evolution --")
         best_ind = tools.selBest(pop, 1)[0]
         print("FINAL Best individual parameters: %s" % (best_ind))
+        best_frust = best_ind[0]
+        print("BEST PAN: "+str(best_frust.pan_angle))
+
         print("Fitness values for these parameters: %s" % list(best_ind.fitness.values))
         pose_publisher.publish(best_ind[1])
-        marker_publisher.publish(best_ind[0].get_visualisation())
+        for i in range(20):
+            marker_publisher.publish(best_ind[0].get_visualisation(False))
+            rospy.sleep(0.5)
 
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
     vmap = VoxelMap()
-    vmap.generate_dummy([1.022,-2.046,1.6])
+    vmap.generate_dummy([1.222,-2.046,1.6])
+    vmap.generate_dummy([1.121,-1.564,1.6])
+    vmap.generate_dummy([1.263,-2.163,1.6])
 #    creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
 
 
