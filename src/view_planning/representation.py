@@ -20,31 +20,20 @@ class RobotViewState():
     def __init__(self):
         pass
 
-    def generate_from_data(self,position,orientation,pan,tilt):
-        origin = [position[0],position[1],position[2]]
-        width = 0.7
-        height = 0.7
-        length = 1.5
-        ps = geometry_msgs.msg.PoseStamped()
-        ps.header.frame_id = "/map"
-        ps.pose.position.x = position[0]
-        ps.pose.position.y = position[1]
-        ps.pose.position.z = position[2]
 
-
-    def generate_random(self,nav_area_generator):
+    def generate_random(self,nav_area):
         #rospy.loginfo("-- Generating View --")
-        self.view_pose = nav_area_generator.get_random_points_in_area()[0]
+        self.view_data = nav_area.get_random_points_in_area()[0]
 
-        origin = [self.view_pose.x,self.view_pose.y,1.75]
+        origin = [self.view_data.x,self.view_data.y,1.75]
         width = 0.7
         height = 0.7
         length = 2
 
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
-        ps.pose.position.x =self.view_pose.x
-        ps.pose.position.y =self.view_pose.y
+        ps.pose.position.x =self.view_data.x
+        ps.pose.position.y =self.view_data.y
         ps.pose.position.z = 1.75
 
         qt = geometry_msgs.msg.Quaternion()
@@ -60,6 +49,11 @@ class RobotViewState():
         v.pan(deg)
         v.pan_angle = 0
         v.tilt_angle = 0
+        if(v.intersects(nav_area.obs_polygon)):
+            pass
+        else:
+            #print("init view doesn't intersect the obs polygon")
+            return self.generate_random(nav_area)
 
         q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
         ps.pose.orientation.x = q[0]
@@ -91,12 +85,8 @@ class ViewFitnessEvaluator():
         degree_of_overlap = float(overlapping_points)/float(len(vmap.points))
 
         # calculate the robot distance of this view from the centroid of the map #
-        points = np.asarray(vmap.points)
-        length = points.shape[0]
-        sum_x = np.sum(points[:, 0])
-        sum_y = np.sum(points[:, 1])
-        sum_z = np.sum(points[:, 2])
-        centroid = np.asarray([sum_x/length, sum_y/length, sum_z/length])
+
+        centroid = vmap.get_centroid()
         centroid_point = Point(centroid)
 
         cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
@@ -120,6 +110,17 @@ class VoxelMap():
     def generate_dummy(self,pos):
         p = [pos[0],pos[1],pos[2]]
         self.points.append(p)
+
+    def calc_centroid(self):
+        points = np.asarray(self.points)
+        length = points.shape[0]
+        sum_x = np.sum(points[:, 0])
+        sum_y = np.sum(points[:, 1])
+        sum_z = np.sum(points[:, 2])
+        self.centroid = np.asarray([sum_x/length, sum_y/length, sum_z/length])
+
+    def get_centroid(self):
+        return self.centroid
 
     def get_visualisation(self):
         centroid_marker = Marker()

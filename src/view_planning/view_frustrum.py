@@ -122,7 +122,7 @@ class ViewFrustum(shapely.geometry.Polygon):
             new_coords.append(k)
         super(ViewFrustum,self).__init__(new_coords)
 
-    def get_visualisation(self,colour=True):
+    def get_visualisation(self,colour="blue"):
         points_list = Marker()
         points_list.header.frame_id = "/map"
         points_list.type = Marker.LINE_LIST
@@ -131,14 +131,22 @@ class ViewFrustum(shapely.geometry.Polygon):
         points_list.scale.z = 0.1
         points_list.color.a = 1.0
 
-        if(colour):
+        if(colour is "blue"):
             points_list.color.r = 0.0
             points_list.color.g = 0.0
             points_list.color.b = 1.0
-        else:
+
+        if(colour is "red"):
             points_list.color.r = 1.0
             points_list.color.g = 0.0
             points_list.color.b = 0.0
+
+        if(colour is "green"):
+            points_list.color.r = 0.0
+            points_list.color.g = 1.0
+            points_list.color.b = 0.0
+
+
 
         #v.pan(3)
         #v.tilt(5)
