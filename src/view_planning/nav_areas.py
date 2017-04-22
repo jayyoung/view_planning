@@ -48,23 +48,33 @@ class NavAreaGenerator():
         self.nav_roi_id = nav_roi_id
         self.observation_roi_id = observation_roi_id
         self.inflation_radius = inflation_radius
-        soma_query = rospy.ServiceProxy('soma/query_rois',SOMAQueryROIs)
+        self.successful_init = False
+        soma_query = rospy.ServiceProxy('/soma/query_rois',SOMAQueryROIs)
 
         query = SOMAQueryROIsRequest()
         query.returnmostrecent = True
         query.roiids = [self.nav_roi_id]
         response = soma_query(query)
-        self.nav_roi = response.rois[-1]
+        if(response.rois):
+            rospy.loginfo("got nav ROI")
+            self.nav_roi = response.rois[-1]
 
-        query = SOMAQueryROIsRequest()
-        query.returnmostrecent = True
-        query.roiids = [self.observation_roi_id]
-        response = soma_query(query)
-        self.observation_roi = response.rois[-1]
+            query = SOMAQueryROIsRequest()
+            query.returnmostrecent = True
+            query.roiids = [self.observation_roi_id]
+            response = soma_query(query)
+            if(response.rois):
+                self.successful_init = True
+                rospy.loginfo("Got obs ROI")
+                self.observation_roi = response.rois[-1]
 
-        rospy.loginfo("Getting Map")
-        msg = rospy.wait_for_message("/move_base/global_costmap/costmap", OccupancyGrid , timeout=10.0)
-        self.costmap = msg
+                rospy.loginfo("Getting Map")
+                msg = rospy.wait_for_message("/move_base/global_costmap/costmap", OccupancyGrid , timeout=10.0)
+                self.costmap = msg
+            else:
+                rospy.loginfo("Failed to find obs ROI")
+        else:
+            rospy.loginfo("Failed to find nav ROI")
 
     # gets a soma roi, turns it into a polygon and then a navarea #
 

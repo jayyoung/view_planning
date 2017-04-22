@@ -42,9 +42,16 @@ class ViewSequenceOptimiser():
 
     def __init__(self,nav_roi,obs_roi,inflation_radius,voxel_map):
         self.nav_generator = NavAreaGenerator(nav_roi,obs_roi,inflation_radius)
+        self.successful_init = False
+        if(self.nav_generator.successful_init is True):
+            pass
+        else:
+            rospy.logerr("Unable to locate one of the target ROIs.")
+            return
         self.nav_area = self.nav_generator.generate_from_soma_roi()
         self.fitness_evaluator = ViewFitnessEvaluator()
         self.voxel_map = voxel_map
+        self.successful_init = True
 
     def generate_view(self):
         dv = RobotViewState()
@@ -146,7 +153,9 @@ class ViewSequenceOptimiser():
         return self.fitness_evaluator.evaluate(individual,self.voxel_map)
 
     def optimise(self):
-
+        if(not self.successful_init):
+            rospy.logerr("System is not prepared. Quitting")
+            return
         target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
         target_points_publisher.publish(self.voxel_map.get_visualisation())
 
@@ -154,7 +163,7 @@ class ViewSequenceOptimiser():
         pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 5, 5
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 250
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.8, -1.0))
@@ -301,14 +310,14 @@ if __name__ == '__main__':
     vmap.calc_centroid()
 
 
-    #optimiser = ViewSequenceOptimiser("2","1",0.4,vmap)
-    #optimiser.optimise()
-    while(True):
-        msg = rospy.wait_for_message("/clicked_point", geometry_msgs.msg.PointStamped , timeout=65.0)
-        robot_pose = np.asarray([msg.point.x,msg.point.y])
-        vmap_cent = np.asarray([0.937,-1.692])
-
-        angle1 = angle_between(vmap_cent,robot_pose)
-        print("RADS ANGLE 1: " + str(angle1))
-        angle1 = np.rad2deg(angle1)
-        print("DEG ANGLE 1: " + str(angle1))
+    optimiser = ViewSequenceOptimiser("3","2",0.4,vmap)
+    optimiser.optimise()
+#    while(True):
+#        msg = rospy.wait_for_message("/clicked_point", geometry_msgs.msg.PointStamped , timeout=65.0)
+#        robot_pose = np.asarray([msg.point.x,msg.point.y])
+#        vmap_cent = np.asarray([0.937,-1.692])
+#
+#        angle1 = angle_between(vmap_cent,robot_pose)
+#        print("RADS ANGLE 1: " + str(angle1))
+#        angle1 = np.rad2deg(angle1)
+#        print("DEG ANGLE 1: " + str(angle1))
