@@ -26,6 +26,8 @@ from representation import VoxelMap
 import sys
 from numpy import (array, dot, arccos, clip)
 from numpy.linalg import norm
+
+
 class DummyFitness():
     def __init__(self):
         self.values = ()
@@ -127,10 +129,12 @@ class ViewSequenceOptimiser():
         (origin[0]+length,origin[1]+-width,origin[2]+-height),
         (origin[0]+length,origin[1]+width,origin[2]+-height),
         (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+
         v.pan(deg)
         v.pan_angle = 0
         v.tilt_angle = 0
         v.pan(int_frust_pan)
+
         if(v.intersects(self.nav_area.obs_polygon)):
             pass
         else:
@@ -159,8 +163,9 @@ class ViewSequenceOptimiser():
         target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
         target_points_publisher.publish(self.voxel_map.get_visualisation())
 
-        marker_publisher = rospy.Publisher("/frust_points", Marker,queue_size=5)
-        pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+        marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
+        pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+        frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
         CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 250
@@ -186,6 +191,8 @@ class ViewSequenceOptimiser():
         rospy.loginfo("Creating initial population and evaluating its fitness")
 
         pop = toolbox.population(n=POPSIZE)
+
+
         # Evaluate the entire population
         fitnesses = list(map(toolbox.evaluate, pop))
         print("INITIAL FITNESSES")
@@ -208,15 +215,15 @@ class ViewSequenceOptimiser():
             offspring = toolbox.select(pop, len(pop))
             # Clone the selected individuals
             offspring = list(map(toolbox.clone, offspring))
-            print("cloned pop:")
-            for k in offspring:
+        #    print("cloned pop:")
+        #    for k in offspring:
                 #print(k.fitness.values)
-                print(k.fitness)
+        #        print(k.fitness)
             ###################### MUTATION ######################
             for mutant in offspring:
                 if random.random() < MUTPB:
                     #
-                    toolbox.mutate_pose(mutant)
+                    #toolbox.mutate_pose(mutant)
                     toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
@@ -238,6 +245,8 @@ class ViewSequenceOptimiser():
                 ind.fitness.values = fit
                 marker_publisher.publish(ind[0].get_visualisation("blue"))
                 pose_publisher.publish(ind[1])
+                frust_pose_publisher.publish(ind[0].pose)
+                #rospy.sleep(0.1)
 
             #    print("NEW FITNESS: " + str(fit))
 
@@ -252,6 +261,7 @@ class ViewSequenceOptimiser():
             target_points_publisher.publish(self.voxel_map.get_visualisation())
             marker_publisher.publish(best_ind[0].get_visualisation("green"))
             pose_publisher.publish(best_ind[1])
+            frust_pose_publisher.publish(best_ind[0].pose)
 
             #rospy.sleep(0.5)
 
@@ -280,6 +290,7 @@ class ViewSequenceOptimiser():
         for i in range(20):
             pose_publisher.publish(best_ind[1])
             marker_publisher.publish(best_ind[0].get_visualisation("red"))
+            frust_pose_publisher.publish(best_ind[0].pose)
             rospy.sleep(0.01)
 
 def unit_vector(vector):
@@ -310,7 +321,7 @@ if __name__ == '__main__':
     vmap.calc_centroid()
 
 
-    optimiser = ViewSequenceOptimiser("3","2",0.4,vmap)
+    optimiser = ViewSequenceOptimiser(nav_roi="2",obs_roi="1",inflation_radius=0.4,voxel_map=vmap)
     optimiser.optimise()
 #    while(True):
 #        msg = rospy.wait_for_message("/clicked_point", geometry_msgs.msg.PointStamped , timeout=65.0)

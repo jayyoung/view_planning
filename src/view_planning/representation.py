@@ -144,19 +144,27 @@ class VoxelMap():
 
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
-    n = NavAreaGenerator("2",0.4)
+    n = NavAreaGenerator("2","1",0.4)
     na = n.generate_from_soma_roi()
 
 
-    view_root_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
-    marker_publisher = rospy.Publisher("/frust_points", Marker,queue_size=5)
-    pose_publisher = rospy.Publisher("/frust_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+    marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
+    pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+    frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
-    for k in range(5):
+
+    for k in range(25):
         view = RobotViewState()
         pose,frustrum = view.generate_random(na)
-        frustrum.pan(90)
+        for i in range(5):
+            frustrum.pan(5)
+            pose_publisher.publish(pose)
+            frust_pose_publisher.publish(frustrum.pose)
+            marker_publisher.publish(frustrum.get_visualisation())
+            rospy.sleep(0.1)
+
         pose_publisher.publish(pose)
+        frust_pose_publisher.publish(frustrum.pose)
 
         centroid_marker = Marker()
         centroid_marker.header.frame_id = "/map"
@@ -173,7 +181,7 @@ if __name__ == '__main__':
         centroid_marker.color.g = 1.0
         centroid_marker.color.b = 0.0
 
-        view_root_publisher.publish(centroid_marker)
+        #view_root_publisher.publish(centroid_marker)
 
         marker_publisher.publish(frustrum.get_visualisation())
 

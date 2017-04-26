@@ -8,6 +8,10 @@ import rospy
 from visualization_msgs.msg import Marker,MarkerArray
 import geometry_msgs
 import copy
+import tf
+import math
+import geometry_msgs
+
 
 class BinaryPoint(shapely.geometry.Point):
     def __init__(self,pos):
@@ -67,14 +71,25 @@ class ViewFrustum(shapely.geometry.Polygon):
         #self.init_pan_angle = default_pan_angle
         self.pan_angle = default_pan_angle
         self.tilt_angle = default_tilt_angle
+        self.agg_angle = 0
+        self.pose = geometry_msgs.msg.PoseStamped()
+        self.pose.header.frame_id = "/map"
+        self.pose.pose.position.x = origin[0]
+        self.pose.pose.position.y = origin[1]
+        self.pose.pose.position.z = 1.75
 
-        #self.pan(default_pan_angle)
-        #self.tilt(default_tilt_angle)
-
+        frust_orientation_q = list(tf.transformations.quaternion_about_axis(math.radians(self.pan_angle), (0,0,1)))
+        frust_quat = geometry_msgs.msg.Quaternion()
+        self.pose.pose.orientation.x = frust_orientation_q[0]
+        self.pose.pose.orientation.y = frust_orientation_q[1]
+        self.pose.pose.orientation.z = frust_orientation_q[2]
+        self.pose.pose.orientation.w = frust_orientation_q[3]
 
 
     def __deepcopy__(self, memo):
         nvs = ViewFrustum(copy.deepcopy(self.origin),copy.deepcopy(self.raw_vertices),copy.deepcopy(self.pan_angle),copy.deepcopy(self.tilt_angle))
+        nvs.pose = copy.deepcopy(self.pose)
+        nvs.agg_angle = self.agg_angle
         #nvs.pan_angle = self.pan_angle
         #nvs.tilt_angle = self.tilt_angle
         return nvs
@@ -102,7 +117,24 @@ class ViewFrustum(shapely.geometry.Polygon):
             k = (p.x,p.y,p.z)
             new_coords.append(k)
         self.raw_vertices = new_coords
+
         super(ViewFrustum,self).__init__(new_coords)
+
+        self.agg_angle += angle
+
+        self.pose = geometry_msgs.msg.PoseStamped()
+        self.pose.header.frame_id = "/map"
+        self.pose.pose.position.x = self.origin[0]
+        self.pose.pose.position.y = self.origin[1]
+        self.pose.pose.position.z = 1.75
+
+        frust_orientation_q = list(tf.transformations.quaternion_about_axis(math.radians(self.agg_angle), (0,0,1)))
+        frust_quat = geometry_msgs.msg.Quaternion()
+
+        self.pose.pose.orientation.x = frust_orientation_q[0]
+        self.pose.pose.orientation.y = frust_orientation_q[1]
+        self.pose.pose.orientation.z = frust_orientation_q[2]
+        self.pose.pose.orientation.w = frust_orientation_q[3]
 
     def tilt(self,angle):
         new_coords = []
@@ -193,14 +225,16 @@ if __name__ == '__main__':
     (origin[0]+length,origin[1]+width,origin[2]+-height),
     (origin[0]+length,origin[1]+(-width),origin[2]+height)])
 
-    marker_publisher = rospy.Publisher("/frust_points", Marker,queue_size=5)
-    targ_publisher = rospy.Publisher("/targ_points", Marker,queue_size=5)
+    marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
+    pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+    frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
     for k in range(10):
         #m = MarkerArray()
-        v.pan(3)
+        v.pan(-3)
         points_list = v.get_visualisation()
         marker_publisher.publish(points_list)
+        frust_pose_publisher.publish(v.pose)
         print(v.contains(b))
 
     #    centroid_marker = Marker()
