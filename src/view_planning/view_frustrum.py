@@ -11,7 +11,13 @@ import copy
 import tf
 import math
 import geometry_msgs
+import sys
+import numpy
+import numpy.random
+from numpy import zeros, ones, arange, asarray, concatenate
+from scipy.optimize import linprog
 
+from scipy.spatial import ConvexHull
 
 class BinaryPoint(shapely.geometry.Point):
     def __init__(self,pos):
@@ -84,6 +90,24 @@ class ViewFrustum(shapely.geometry.Polygon):
         self.pose.pose.orientation.y = frust_orientation_q[1]
         self.pose.pose.orientation.z = frust_orientation_q[2]
         self.pose.pose.orientation.w = frust_orientation_q[3]
+
+    def point_in_hull(self,pnt):
+        '''
+        Given a set of points that defines a convex hull, uses simplex LP to determine
+        whether point lies within hull.
+        `hull_points` -- (N, 3) array of points defining the hull
+        `pnt` -- point array of shape (3,)
+        '''
+        hull_points = np.array(self.raw_vertices)
+        N = hull_points.shape[0]
+        c = ones(N)
+        A_eq = concatenate((hull_points, ones((N,1))), 1).T   # rows are x, y, z, 1
+        b_eq = concatenate((pnt, (1,)))
+        result = linprog(c, A_eq=A_eq, b_eq=b_eq)
+        if result.success and c.dot(result.x) == 1.:
+            return True
+        return False
+
 
 
     def __deepcopy__(self, memo):
@@ -212,9 +236,11 @@ class ViewFrustum(shapely.geometry.Polygon):
         return points_list
 
 
+
+
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
-    b = BinaryPoint([1,0,1.75])
+    b = BinaryPoint([1,0,2])
     width = 0.7
     height = 0.7
     length = 1.5
@@ -224,6 +250,7 @@ if __name__ == '__main__':
     (origin[0]+length,origin[1]+-width,origin[2]+-height),
     (origin[0]+length,origin[1]+width,origin[2]+-height),
     (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+    target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
 
     marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
     pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
@@ -231,28 +258,29 @@ if __name__ == '__main__':
 
     for k in range(10):
         #m = MarkerArray()
-        v.pan(-3)
+        #v.pan(-3)
         points_list = v.get_visualisation()
         marker_publisher.publish(points_list)
         frust_pose_publisher.publish(v.pose)
-        print(v.contains(b))
-
-    #    centroid_marker = Marker()
-    #    centroid_marker.header.frame_id = "/map"
-    #    centroid_marker.type = Marker.SPHERE
-    #    centroid_marker.header.stamp = rospy.Time.now()
-    #    centroid_marker.pose.position.x = b.x
-    #    centroid_marker.pose.position.y = b.y
-    #    centroid_marker.pose.position.z = b.z
-    #    centroid_marker.scale.x = 0.1
-    #    centroid_marker.scale.y = 0.1
-    #    centroid_marker.scale.z = 0.1
-    #    centroid_marker.color.a = 1.0
-    #    centroid_marker.color.r = 1.0
-    #    centroid_marker.color.g = 0.0
-    #    centroid_marker.color.b = 0.0
-    #    targ_publisher.publish(centroid_marker)
+        print("in shapley polygon:"+ str(v.contains(b)))
+        ich = pnt_in_cvex_hull_2(np.array(v.raw_vertices),np.array([b.x,b.y,b.z]))
+        print("in convex hull: " + str(ich))
+        centroid_marker = Marker()
+        centroid_marker.header.frame_id = "/map"
+        centroid_marker.type = Marker.SPHERE
+        centroid_marker.header.stamp = rospy.Time.now()
+        centroid_marker.pose.position.x = b.x
+        centroid_marker.pose.position.y = b.y
+        centroid_marker.pose.position.z = b.z
+        centroid_marker.scale.x = 0.1
+        centroid_marker.scale.y = 0.1
+        centroid_marker.scale.z = 0.1
+        centroid_marker.color.a = 1.0
+        centroid_marker.color.r = 1.0
+        centroid_marker.color.g = 0.0
+        centroid_marker.color.b = 0.0
+        target_points_publisher.publish(centroid_marker)
         #print(m)
         #p_rot = affinity.rotate(p,67,v.origin)
         #print(p_rot)
-        rospy.sleep(1)
+        rospy.sleep(0.3)

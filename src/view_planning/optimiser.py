@@ -223,7 +223,7 @@ class ViewSequenceOptimiser():
             for mutant in offspring:
                 if random.random() < MUTPB:
                     #
-                    #toolbox.mutate_pose(mutant)
+                    toolbox.mutate_pose(mutant)
                     toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
@@ -315,9 +315,9 @@ if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
     vmap = VoxelMap()
-    vmap.generate_dummy([1.121,-1.564,1.6])
-    vmap.generate_dummy([0.845,-2.106,1.6])
-    vmap.generate_dummy([0.845,-1.406,1.6])
+    vmap.generate_dummy([1.121,-1.564,1.5])
+    vmap.generate_dummy([0.845,-2.106,1.5])
+    vmap.generate_dummy([0.845,-1.406,1.5])
     vmap.calc_centroid()
 
 

@@ -80,9 +80,12 @@ class ViewFitnessEvaluator():
 
         overlapping_points = 0
         for point in vmap.points:
-            if(frust.contains(Point(point))):
+            if(frust.point_in_hull(np.array(point))):
                 overlapping_points+=1
         degree_of_overlap = float(overlapping_points)/float(len(vmap.points))
+        print("overlapping points:" + str(overlapping_points))
+        print("total points: " + str(len(vmap.points)))
+        print("degree: " + str(degree_of_overlap))
 
         # calculate the robot distance of this view from the centroid of the map #
 
