@@ -16,9 +16,10 @@ import numpy
 import numpy.random
 from numpy import zeros, ones, arange, asarray, concatenate
 from scipy.optimize import linprog
-
+import os
 from scipy.spatial import ConvexHull
-
+import random
+from random import randint
 class BinaryPoint(shapely.geometry.Point):
     def __init__(self,pos):
         super(BinaryPoint,self).__init__(pos)
@@ -26,46 +27,6 @@ class BinaryPoint(shapely.geometry.Point):
 
     def visited(self):
         return self.visit_counter == 0
-
-def tilt(frust,angle):
-    print(frust)
-    new_coords = []
-    for k in frust.exterior.coords:
-        x = k[0]
-        y = k[1]
-        z = k[2]
-        pk = (x,z,z)
-        pk = affinity.rotate(Point(pk),angle,v.origin)
-        pk = Point(pk)
-        p = geometry_msgs.msg.Point()
-        p.x = v.origin[0]+pk.x
-        p.y = v.origin[1]+y
-        p.z = v.origin[2]+pk.y
-        k = (p.x,p.y,p.z)
-        new_coords.append(k)
-    new = ViewFrustum(frust.origin,new_coords)
-    print(new)
-    return new
-
-def pan(frust,angle):
-    print(frust)
-    new_coords = []
-    for k in frust.exterior.coords:
-        x = k[0]
-        y = k[1]
-        z = k[2]
-        pk = (x,y,z)
-        pk = affinity.rotate(Point(pk),angle,v.origin)
-        pk = Point(pk)
-        p = geometry_msgs.msg.Point()
-        p.x = pk.x
-        p.y = pk.y
-        p.z = pk.z
-        k = (p.x,p.y,p.z)
-        new_coords.append(k)
-    new = ViewFrustum(frust.origin,new_coords)
-    print(new)
-    return new
 
 class ViewFrustum(shapely.geometry.Polygon):
 
@@ -141,20 +102,16 @@ class ViewFrustum(shapely.geometry.Polygon):
             k = (p.x,p.y,p.z)
             new_coords.append(k)
         self.raw_vertices = new_coords
-
         super(ViewFrustum,self).__init__(new_coords)
 
         self.agg_angle += angle
-
         self.pose = geometry_msgs.msg.PoseStamped()
         self.pose.header.frame_id = "/map"
         self.pose.pose.position.x = self.origin[0]
         self.pose.pose.position.y = self.origin[1]
         self.pose.pose.position.z = 1.75
-
         frust_orientation_q = list(tf.transformations.quaternion_about_axis(math.radians(self.agg_angle), (0,0,1)))
         frust_quat = geometry_msgs.msg.Quaternion()
-
         self.pose.pose.orientation.x = frust_orientation_q[0]
         self.pose.pose.orientation.y = frust_orientation_q[1]
         self.pose.pose.orientation.z = frust_orientation_q[2]
@@ -162,7 +119,9 @@ class ViewFrustum(shapely.geometry.Polygon):
 
     def tilt(self,angle):
         new_coords = []
-        self.tilt_angle = angle
+        self.tilt_angle += angle
+        #print("b"+str(self.raw_vertices[0]))
+
         for k in self.exterior.coords:
             x = k[0]
             y = k[1]
@@ -176,6 +135,10 @@ class ViewFrustum(shapely.geometry.Polygon):
             p.z = pk.y
             k = (p.x,p.y,p.z)
             new_coords.append(k)
+        #new_coords[0] = self.origin
+        self.raw_vertices = new_coords
+        #print("a" + str(self.raw_vertices[0]))
+
         super(ViewFrustum,self).__init__(new_coords)
 
     def get_visualisation(self,colour="blue"):
@@ -238,8 +201,219 @@ class ViewFrustum(shapely.geometry.Polygon):
 
 
 
+class NewViewFrustum():
+    def __init__(self):
+        #self.ntl,self.ntr,self.nbl,self.nbr,self.ftl,self.ftr,self.fbl,self.fbr = Point()
+        #self.near_d,self.far_d,self.ratio,self.angle,self.tang = 0
+        #self.nw,self.nh,self.fw,self.fh = 0
+        #self.value = 0
+        self.structure = {}
+
+    def setCamInternals(self,angle,ratio,near_d,far_d):
+        self.ratio = ratio
+        self.angle = angle
+        self.near_d = near_d
+        self.far_d = far_d
+        ANG2RAD = 3.14159265358979323846/180.0
+
+        self.tang = math.tan(self.angle * ANG2RAD * 0.5)
+        self.nh = self.near_d * self.tang
+    	self.nw = self.nh * self.ratio
+    	self.fh = self.far_d  * self.tang
+    	self.fw = self.fh * self.ratio
+
+    def normalise(self,vector):
+        #print("starting")
+        #print(vector)
+        length = math.sqrt(vector[0]*vector[0]+vector[1]*vector[1]+vector[2]*vector[2])
+        #length = len(vector)
+        #print(length)
+        #print("normalising..")
+        if(length):
+            vector[0] /= length
+            vector[1] /= length
+            vector[2] /= length
+        #print(vector)
+        return np.array(vector)
+
+
+    def setUpPlanesFromPose(self,p,l,u):
+        #z = p-l
+        z = [0.0,0.0,0.0]
+        z[0] = p[0]-l[0]
+        z[1] = p[1]-l[1]
+        z[2] = p[2]-l[2]
+        z = self.normalise(z)
+        #print(z)
+
+        #x = u * z
+        #print("NP RESULT:"+str(x))
+        x = mul(u,z)
+        x = self.normalise(x)
+        x = np.array(x)
+
+        #y = z * x
+        y = mul(z,x)
+        y = np.array(y)
+
+        nc = p-z*self.near_d
+    #    f = [0.0,0.0,0.0]
+    #    f[0] = z[0]*self.near_d
+    #    f[1] = z[1]*self.near_d
+    #    f[2] = z[2]*self.near_d
+    #    f = np.array(f)
+    #    nc = p-f
+        #print("numpy answer:"+str(npnc))
+        #print("my answer:"+str(nc))
+        fc = p - z * self.far_d
+
+        ntl = nc + y * self.nh - x * self.nw
+        ntr = nc + y * self.nh + x * self.nw
+
+        nbl = nc - y * self.nh - x * self.nw
+        nbr = nc - y * self.nh + x * self.nw
+
+        ftl = fc + y * self.fh - x * self.fw
+        ftr = fc + y * self.fh + x * self.fw
+
+        fbl = fc - y * self.fh - x * self.fw
+        fbr = fc - y * self.fh + x * self.fw
+
+        self.points = []
+        self.points.append(vec2point(ntl))
+        self.points.append(vec2point(ntr))
+
+        self.points.append(vec2point(nbl))
+        self.points.append(vec2point(nbr))
+
+        self.points.append(vec2point(ftl))
+        self.points.append(vec2point(ftr))
+
+        self.points.append(vec2point(fbl))
+        self.points.append(vec2point(fbr))
+
+        for k in self.points:
+            print(k)
+            print("")
+
+        # these are PLANES
+        self.structure['TOP'] = np.array([ntr,ntl,ftl])
+        self.structure['BOTTOM'] = np.array([nbl,nbr,fbr])
+        self.structure['LEFT'] = np.array([ntl,nbl,fbl])
+
+        self.structure['RIGHT'] = np.array([nbr,ntr,fbr])
+        self.structure['NEARP'] = np.array([ntl,ntr,nbr])
+        self.structure['FARP'] = np.array([ftr,ftl,fbl])
+
+
+    def create_frustum_marker(self, pose):
+        marker1 = Marker()
+        marker1.header.frame_id = "/map"
+        marker1.type = marker1.LINE_LIST
+        marker1.action = marker1.ADD
+        marker1.scale.x = 0.05
+        marker1.color.a = 1
+
+
+        marker1.color.r = 1
+        marker1.color.g = 0
+        marker1.color.b = 0
+
+        marker1.pose.orientation = pose.orientation
+        marker1.pose.position = pose.position
+
+        marker1.points.append(self.points[0])
+        marker1.points.append(self.points[1])
+
+        marker1.points.append(self.points[2])
+        marker1.points.append(self.points[3])
+
+        marker1.points.append(self.points[0])
+        marker1.points.append(self.points[2])
+
+        marker1.points.append(self.points[1])
+        marker1.points.append(self.points[3])
+
+        marker1.points.append(self.points[4])
+        marker1.points.append(self.points[5])
+
+        marker1.points.append(self.points[6])
+        marker1.points.append(self.points[7])
+
+        marker1.points.append(self.points[4])
+        marker1.points.append(self.points[6])
+
+        marker1.points.append(self.points[5])
+        marker1.points.append(self.points[7])
+
+        marker1.points.append(self.points[0])
+        marker1.points.append(self.points[4])
+
+        marker1.points.append(self.points[2])
+        marker1.points.append(self.points[6])
+
+        marker1.points.append(self.points[1])
+        marker1.points.append(self.points[5])
+
+        marker1.points.append(self.points[3])
+        marker1.points.append(self.points[7])
+
+        return marker1
+
+def mul(a,b):
+    x = [0.0,0.0,0.0]
+    x[0] = a[1]*b[2]-a[2]*b[1]
+    x[1] = a[2]*b[0]-a[0]*b[2]
+    x[2] = a[0]*b[1]-a[1]*b[0]
+    return x
+
+
+def vec2point(point):
+    p = geometry_msgs.msg.Point()
+    p.x = point[0]
+    p.y = point[1]
+    p.z = point[2]
+    return p
+
+
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
+
+    pubfrustum = rospy.Publisher('/frustums', Marker,queue_size=25)
+
+    frustum_near = 0.8;
+    frustum_far = 2.5;
+    frustum_angle = 40.5;
+    frustum_ratio = 1.333;
+
+    p = np.array([0.0,0.0,0.0])
+    l = np.array([1.0,0.0,0.0])
+    u = np.array([0.0,0.0,1.0])
+
+    pose = geometry_msgs.msg.Pose()
+    pose.position.x = 1
+    pose.position.y = 0
+    pose.position.z = 1.75
+
+    yaw = random.uniform(0, 2*math.pi)
+    q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
+    pose.orientation.x = q[0]
+    pose.orientation.y = q[1]
+    pose.orientation.z = q[2]
+    pose.orientation.w = q[3]
+
+    nf = NewViewFrustum()
+    nf.setCamInternals(frustum_angle,frustum_ratio,frustum_near,frustum_far)
+    nf.setUpPlanesFromPose(p,l,u)
+    marker = nf.create_frustum_marker(pose)
+
+    for i in range(20):
+        print("pub")
+        pubfrustum.publish(marker)
+        rospy.sleep(0.1)
+
+    sys.exit()
+
     b = BinaryPoint([1,0,2])
     width = 0.7
     height = 0.7
@@ -255,16 +429,15 @@ if __name__ == '__main__':
     marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
     pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
     frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
-
-    for k in range(10):
+    print("ORIGIN:" + str(origin))
+    for k in range(20):
         #m = MarkerArray()
-        #v.pan(-3)
+        v.tilt(-2)
+        #v.pan(2)
         points_list = v.get_visualisation()
         marker_publisher.publish(points_list)
         frust_pose_publisher.publish(v.pose)
         print("in shapley polygon:"+ str(v.contains(b)))
-        ich = pnt_in_cvex_hull_2(np.array(v.raw_vertices),np.array([b.x,b.y,b.z]))
-        print("in convex hull: " + str(ich))
         centroid_marker = Marker()
         centroid_marker.header.frame_id = "/map"
         centroid_marker.type = Marker.SPHERE

@@ -49,6 +49,7 @@ class RobotViewState():
         v.pan(deg)
         v.pan_angle = 0
         v.tilt_angle = 0
+        v.tilt(random.randint(-45,45))
         if(v.intersects(nav_area.obs_polygon)):
             pass
         else:
@@ -83,6 +84,9 @@ class ViewFitnessEvaluator():
             if(frust.point_in_hull(np.array(point))):
                 overlapping_points+=1
         degree_of_overlap = float(overlapping_points)/float(len(vmap.points))
+        print("pan: " + str(frust.pan_angle))
+
+        print("tilt: " + str(frust.pan_angle))
         print("overlapping points:" + str(overlapping_points))
         print("total points: " + str(len(vmap.points)))
         print("degree: " + str(degree_of_overlap))

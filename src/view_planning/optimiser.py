@@ -60,19 +60,38 @@ class ViewSequenceOptimiser():
         robot_pose,frust = dv.generate_random(self.nav_area)
         return [frust,robot_pose]
 
-    def mutate_view(self,ind):
-        pan_new = random.randint(-45,45)
+    def mutate_pan(self,ind):
+        pan_new = random.randint(-20,20)
         if((ind[0].pan_angle+pan_new) > 45 or (ind[0].pan_angle+pan_new) < -45):
             return ind
         #print("PANNING WITH: " + str(pan_new))
         #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
         ind[0].pan(pan_new)
-        if(ind[0].intersects(self.nav_area.obs_polygon)):
-            pass
-        else:
-            ind[0].pan(-pan_new)
-            return self.mutate_view(ind)
+        #if(ind[0].intersects(self.nav_area.obs_polygon)):
         return ind
+        #else:
+        #    ind[0].pan(-pan_new)
+        #    return self.mutate_pan(ind)
+
+    def mutate_tilt(self,ind):
+        tilt_new = random.randint(-20,20)
+        if((ind[0].tilt_angle+tilt_new) > 45 or (ind[0].tilt_angle+tilt_new) < -45):
+            return ind
+        #print("PANNING WITH: " + str(pan_new))
+        #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
+        ind[0].tilt(tilt_new)
+        #if(ind[0].intersects(self.nav_area.obs_polygon)):
+        return ind
+        #else:
+        #    ind[0].tilt(-tilt_new)
+        #    return self.mutate_tilt(ind)
+
+
+    def mutate_view(self,ind):
+        ind = self.mutate_pan(ind)
+        ind = self.mutate_tilt(ind)
+        return ind
+
 
     def mutate_pose(self,ind):
         mutation_intensity = 6
@@ -168,10 +187,10 @@ class ViewSequenceOptimiser():
         frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 250
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 100, 250
 
 
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.8, -1.0))
+        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.5, -0.6))
         creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
 
@@ -315,9 +334,9 @@ if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
     vmap = VoxelMap()
-    vmap.generate_dummy([1.121,-1.564,1.5])
-    vmap.generate_dummy([0.845,-2.106,1.5])
-    vmap.generate_dummy([0.845,-1.406,1.5])
+    vmap.generate_dummy([1.121,-1.564,0.9])
+    vmap.generate_dummy([0.845,-2.106,0.9])
+    vmap.generate_dummy([0.845,-1.406,0.9])
     vmap.calc_centroid()
 
 
