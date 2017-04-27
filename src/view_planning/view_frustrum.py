@@ -9,6 +9,7 @@ from visualization_msgs.msg import Marker,MarkerArray
 import geometry_msgs
 import copy
 import tf
+import tf2_msgs
 import math
 import geometry_msgs
 import sys
@@ -20,6 +21,9 @@ import os
 from scipy.spatial import ConvexHull
 import random
 from random import randint
+import math3d as m3d
+
+
 class BinaryPoint(shapely.geometry.Point):
     def __init__(self,pos):
         super(BinaryPoint,self).__init__(pos)
@@ -28,7 +32,7 @@ class BinaryPoint(shapely.geometry.Point):
     def visited(self):
         return self.visit_counter == 0
 
-class ViewFrustum(shapely.geometry.Polygon):
+class OldViewFrustum(shapely.geometry.Polygon):
 
     def __init__(self,origin,vertices,default_pan_angle=0,default_tilt_angle=0):
         super(ViewFrustum,self).__init__(vertices)
@@ -199,15 +203,52 @@ class ViewFrustum(shapely.geometry.Polygon):
         return points_list
 
 
-
-
-class NewViewFrustum():
+class ViewFrustum():
     def __init__(self):
         #self.ntl,self.ntr,self.nbl,self.nbr,self.ftl,self.ftr,self.fbl,self.fbr = Point()
         #self.near_d,self.far_d,self.ratio,self.angle,self.tang = 0
         #self.nw,self.nh,self.fw,self.fh = 0
         #self.value = 0
+        self.origin = [0,0,1.75]
+
+        self.position = [0,0,1.75]
+
         self.structure = {}
+
+        self.pan_angle = 0
+
+        self.tilt_angle = 0
+        self.reset()
+
+    def reset(self):
+        frustum_near = 0.8;
+        frustum_far = 2.5;
+        frustum_angle = 40.5;
+        frustum_ratio = 1.333;
+
+        p = np.array([0.0,0.0,0.0])
+        l = np.array([1.0,0.0,0.0])
+        u = np.array([0.0,0.0,1.0])
+        self.setCamInternals(frustum_angle,frustum_ratio,frustum_near,frustum_far)
+        self.setUpPlanesFromPose(p,l,u)
+
+    def point_in_hull(self,pnt):
+        '''
+        Given a set of points that defines a convex hull, uses simplex LP to determine
+        whether point lies within hull.
+        `hull_points` -- (N, 3) array of points defining the hull
+        `pnt` -- point array of shape (3,)
+        '''
+        hull_points = np.array(self.raw_points)
+        N = hull_points.shape[0]
+        c = ones(N)
+        A_eq = concatenate((hull_points, ones((N,1))), 1).T   # rows are x, y, z, 1
+        b_eq = concatenate((pnt, (1,)))
+        result = linprog(c, A_eq=A_eq, b_eq=b_eq)
+        if result.success and c.dot(result.x) == 1.:
+            return True
+        return False
+
 
     def setCamInternals(self,angle,ratio,near_d,far_d):
         self.ratio = ratio
@@ -257,14 +298,6 @@ class NewViewFrustum():
         y = np.array(y)
 
         nc = p-z*self.near_d
-    #    f = [0.0,0.0,0.0]
-    #    f[0] = z[0]*self.near_d
-    #    f[1] = z[1]*self.near_d
-    #    f[2] = z[2]*self.near_d
-    #    f = np.array(f)
-    #    nc = p-f
-        #print("numpy answer:"+str(npnc))
-        #print("my answer:"+str(nc))
         fc = p - z * self.far_d
 
         ntl = nc + y * self.nh - x * self.nw
@@ -279,6 +312,7 @@ class NewViewFrustum():
         fbl = fc - y * self.fh - x * self.fw
         fbr = fc - y * self.fh + x * self.fw
 
+        self.raw_points = [ntl,ntr,nbl,nbr,ftl,ftr,fbl,fbr]
         self.points = []
         self.points.append(vec2point(ntl))
         self.points.append(vec2point(ntr))
@@ -292,10 +326,6 @@ class NewViewFrustum():
         self.points.append(vec2point(fbl))
         self.points.append(vec2point(fbr))
 
-        for k in self.points:
-            print(k)
-            print("")
-
         # these are PLANES
         self.structure['TOP'] = np.array([ntr,ntl,ftl])
         self.structure['BOTTOM'] = np.array([nbl,nbr,fbr])
@@ -305,8 +335,55 @@ class NewViewFrustum():
         self.structure['NEARP'] = np.array([ntl,ntr,nbr])
         self.structure['FARP'] = np.array([ftr,ftl,fbl])
 
+    def pan(self,angle):
+        self.reset()
 
-    def create_frustum_marker(self, pose):
+        r = m3d.Orientation.new_axis_angle([0,0,1],math.radians(angle))
+        new_points = []
+        for k in self.points:
+            v = m3d.Vector(k.x,k.y,k.z)
+            ne = r * v
+            k.x = ne[0]
+            k.y = ne[1]
+            k.z = ne[2]
+            new_points.append(np.array([ne[0],ne[1],ne[2]]))
+        self.pan_angle = angle
+        self.raw_points = new_points
+
+        self.translate(self.position)
+
+    def tilt(self,angle):
+        self.reset()
+
+        r = m3d.Orientation.new_axis_angle([0,1,0],math.radians(angle))
+        new_points = []
+        for k in self.points:
+            v = m3d.Vector(k.x,k.y,k.z)
+            ne = r * v
+            k.x = ne[0]
+            k.y = ne[1]
+            k.z = ne[2]
+            new_points.append(np.array([ne[0],ne[1],ne[2]]))
+        self.tilt_angle = angle
+        self.raw_points = new_points
+
+        self.translate(self.position)
+
+    def translate(self,pos):
+        if(pos != self.position):
+            self.reset()
+        self.position = pos
+        new_points = []
+        for k in self.points:
+            #print("PRE TRANSFORM: " + str(k))
+            k.x = k.x+pos[0]
+            k.y = k.y+pos[1]
+            k.z = k.z+pos[2]
+            new_points.append(np.array([k.x,k.y,k.z]))
+        self.raw_points = new_points
+            #print("POST TRANSFORM: " + str(k))
+
+    def get_visualisation(self,colour="blue"):
         marker1 = Marker()
         marker1.header.frame_id = "/map"
         marker1.type = marker1.LINE_LIST
@@ -314,13 +391,21 @@ class NewViewFrustum():
         marker1.scale.x = 0.05
         marker1.color.a = 1
 
+        if(colour is "blue"):
+            marker1.color.r = 0.0
+            marker1.color.g = 0.0
+            marker1.color.b = 1.0
+        if(colour is "red"):
+            marker1.color.r = 1.0
+            marker1.color.g = 0.0
+            marker1.color.b = 0.0
+        if(colour is "green"):
+            marker1.color.r = 0.0
+            marker1.color.g = 1.0
+            marker1.color.b = 0.0
 
-        marker1.color.r = 1
-        marker1.color.g = 0
-        marker1.color.b = 0
-
-        marker1.pose.orientation = pose.orientation
-        marker1.pose.position = pose.position
+    #    marker1.pose.orientation = pose.orientation
+    #    marker1.pose.position = pose.position
 
         marker1.points.append(self.points[0])
         marker1.points.append(self.points[1])
@@ -381,63 +466,30 @@ if __name__ == '__main__':
 
     pubfrustum = rospy.Publisher('/frustums', Marker,queue_size=25)
 
-    frustum_near = 0.8;
-    frustum_far = 2.5;
-    frustum_angle = 40.5;
-    frustum_ratio = 1.333;
-
-    p = np.array([0.0,0.0,0.0])
-    l = np.array([1.0,0.0,0.0])
-    u = np.array([0.0,0.0,1.0])
-
-    pose = geometry_msgs.msg.Pose()
-    pose.position.x = 1
-    pose.position.y = 0
-    pose.position.z = 1.75
-
-    yaw = random.uniform(0, 2*math.pi)
-    q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
-    pose.orientation.x = q[0]
-    pose.orientation.y = q[1]
-    pose.orientation.z = q[2]
-    pose.orientation.w = q[3]
-
-    nf = NewViewFrustum()
-    nf.setCamInternals(frustum_angle,frustum_ratio,frustum_near,frustum_far)
-    nf.setUpPlanesFromPose(p,l,u)
-    marker = nf.create_frustum_marker(pose)
-
-    for i in range(20):
-        print("pub")
-        pubfrustum.publish(marker)
-        rospy.sleep(0.1)
-
-    sys.exit()
-
     b = BinaryPoint([1,0,2])
-    width = 0.7
-    height = 0.7
-    length = 1.5
+
     origin = [0,0,1.75]
-    v = ViewFrustum(origin,[origin,
-    (origin[0]+length,origin[1]+width,origin[2]+height),
-    (origin[0]+length,origin[1]+-width,origin[2]+-height),
-    (origin[0]+length,origin[1]+width,origin[2]+-height),
-    (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+    target = [0,7,1.75]
+    v = ViewFrustum()
+    v.translate(target)
+
     target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
 
     marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
     pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
     frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
     print("ORIGIN:" + str(origin))
+    pan_amt = 1
     for k in range(20):
         #m = MarkerArray()
-        v.tilt(-2)
+        v.pan(pan_amt)
+        pan_amt += 2
+        #v.translate(target)
         #v.pan(2)
         points_list = v.get_visualisation()
         marker_publisher.publish(points_list)
-        frust_pose_publisher.publish(v.pose)
-        print("in shapley polygon:"+ str(v.contains(b)))
+    #    frust_pose_publisher.publish(v.pose)
+        print("in shapley polygon:"+ str(v.point_in_hull(np.array([1,0,2]))))
         centroid_marker = Marker()
         centroid_marker.header.frame_id = "/map"
         centroid_marker.type = Marker.SPHERE

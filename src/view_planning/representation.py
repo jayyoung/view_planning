@@ -26,14 +26,11 @@ class RobotViewState():
         self.view_data = nav_area.get_random_points_in_area()[0]
 
         origin = [self.view_data.x,self.view_data.y,1.75]
-        width = 0.7
-        height = 0.7
-        length = 2
 
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
-        ps.pose.position.x =self.view_data.x
-        ps.pose.position.y =self.view_data.y
+        ps.pose.position.x = self.view_data.x
+        ps.pose.position.y = self.view_data.y
         ps.pose.position.z = 1.75
 
         qt = geometry_msgs.msg.Quaternion()
@@ -41,16 +38,15 @@ class RobotViewState():
         deg = math.degrees(yaw)
         tlt = 0
 
-        v = ViewFrustum(origin,[origin,
-        (origin[0]+length,origin[1]+width,origin[2]+height),
-        (origin[0]+length,origin[1]+-width,origin[2]+-height),
-        (origin[0]+length,origin[1]+width,origin[2]+-height),
-        (origin[0]+length,origin[1]+(-width),origin[2]+height)])
-        v.pan(deg)
+        v = ViewFrustum()
+        #v.pan(deg)
+        v.translate(origin)
         v.pan_angle = 0
         v.tilt_angle = 0
-        v.tilt(random.randint(-45,45))
-        if(v.intersects(nav_area.obs_polygon)):
+        roi_hull = nav_area.obs_polygon
+        view_hull = Polygon(v.raw_points)
+        #print(view_hull)
+        if(roi_hull.intersects(view_hull)):
             pass
         else:
             #print("init view doesn't intersect the obs polygon")

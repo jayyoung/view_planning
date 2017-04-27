@@ -184,10 +184,10 @@ class ViewSequenceOptimiser():
 
         marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
         pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
-        frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
+        #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 100, 250
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 25, 100
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.5, -0.6))
@@ -242,8 +242,8 @@ class ViewSequenceOptimiser():
             for mutant in offspring:
                 if random.random() < MUTPB:
                     #
-                    toolbox.mutate_pose(mutant)
-                    toolbox.mutate_view(mutant)
+                    #toolbox.mutate_pose(mutant)
+                    #toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
 
@@ -264,8 +264,8 @@ class ViewSequenceOptimiser():
                 ind.fitness.values = fit
                 marker_publisher.publish(ind[0].get_visualisation("blue"))
                 pose_publisher.publish(ind[1])
-                frust_pose_publisher.publish(ind[0].pose)
-                #rospy.sleep(0.1)
+                #frust_pose_publisher.publish(ind[0].pose)
+                rospy.sleep(0.1)
 
             #    print("NEW FITNESS: " + str(fit))
 
@@ -280,7 +280,7 @@ class ViewSequenceOptimiser():
             target_points_publisher.publish(self.voxel_map.get_visualisation())
             marker_publisher.publish(best_ind[0].get_visualisation("green"))
             pose_publisher.publish(best_ind[1])
-            frust_pose_publisher.publish(best_ind[0].pose)
+            #frust_pose_publisher.publish(best_ind[0].pose)
 
             #rospy.sleep(0.5)
 
@@ -309,7 +309,7 @@ class ViewSequenceOptimiser():
         for i in range(20):
             pose_publisher.publish(best_ind[1])
             marker_publisher.publish(best_ind[0].get_visualisation("red"))
-            frust_pose_publisher.publish(best_ind[0].pose)
+            #frust_pose_publisher.publish(best_ind[0].pose)
             rospy.sleep(0.01)
 
 def unit_vector(vector):
