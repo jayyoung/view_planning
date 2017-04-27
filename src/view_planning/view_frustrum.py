@@ -232,6 +232,8 @@ class ViewFrustum():
         self.setCamInternals(frustum_angle,frustum_ratio,frustum_near,frustum_far)
         self.setUpPlanesFromPose(p,l,u)
 
+
+
     def point_in_hull(self,pnt):
         '''
         Given a set of points that defines a convex hull, uses simplex LP to determine
@@ -335,8 +337,12 @@ class ViewFrustum():
         self.structure['NEARP'] = np.array([ntl,ntr,nbr])
         self.structure['FARP'] = np.array([ftr,ftl,fbl])
 
-    def pan(self,angle):
-        self.reset()
+
+    def panBy(self,amount):
+        self.panTo(self.pan_angle+amount)
+
+    def panTo(self,angle):
+        #self.reset()
 
         r = m3d.Orientation.new_axis_angle([0,0,1],math.radians(angle))
         new_points = []
@@ -350,10 +356,30 @@ class ViewFrustum():
         self.pan_angle = angle
         self.raw_points = new_points
 
-        self.translate(self.position)
+        #self.translate(self.position)
 
-    def tilt(self,angle):
-        self.reset()
+    def applyPanTilt(self,pa,ta):
+        pr = m3d.Orientation.new_axis_angle([0,0,1],math.radians(pa))
+        tr = m3d.Orientation.new_axis_angle([0,1,0],math.radians(ta))
+        new_points = []
+        for k in self.points:
+            v = m3d.Vector(k.x,k.y,k.z)
+            ne = pr * tr * v
+            k.x = ne[0]
+            k.y = ne[1]
+            k.z = ne[2]
+            new_points.append(np.array([ne[0],ne[1],ne[2]]))
+        self.pan_angle = pa
+        self.tilt_angle = ta
+        self.raw_points = new_points
+
+
+    def tiltBy(self,amount):
+        self.tiltTo(self.tilt_angle+amount)
+
+
+    def tiltTo(self,angle):
+        #self.reset()
 
         r = m3d.Orientation.new_axis_angle([0,1,0],math.radians(angle))
         new_points = []
@@ -367,7 +393,7 @@ class ViewFrustum():
         self.tilt_angle = angle
         self.raw_points = new_points
 
-        self.translate(self.position)
+        #self.translate(self.position)
 
     def translate(self,pos):
         if(pos != self.position):
@@ -375,13 +401,11 @@ class ViewFrustum():
         self.position = pos
         new_points = []
         for k in self.points:
-            #print("PRE TRANSFORM: " + str(k))
             k.x = k.x+pos[0]
             k.y = k.y+pos[1]
             k.z = k.z+pos[2]
             new_points.append(np.array([k.x,k.y,k.z]))
         self.raw_points = new_points
-            #print("POST TRANSFORM: " + str(k))
 
     def get_visualisation(self,colour="blue"):
         marker1 = Marker()
@@ -471,7 +495,7 @@ if __name__ == '__main__':
     origin = [0,0,1.75]
     target = [0,7,1.75]
     v = ViewFrustum()
-    v.translate(target)
+#    v.translate(target)
 
     target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
 
@@ -482,9 +506,10 @@ if __name__ == '__main__':
     pan_amt = 1
     for k in range(20):
         #m = MarkerArray()
-        v.pan(pan_amt)
+        v.reset()
+        v.applyPanTilt(5+pan_amt,25)
         pan_amt += 2
-        #v.translate(target)
+        v.translate(target)
         #v.pan(2)
         points_list = v.get_visualisation()
         marker_publisher.publish(points_list)

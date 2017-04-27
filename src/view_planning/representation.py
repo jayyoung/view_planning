@@ -39,8 +39,13 @@ class RobotViewState():
         tlt = 0
 
         v = ViewFrustum()
-        #v.pan(deg)
+
+        ## MUST ALWAYS TRANSLATE BEFORE ROTATE ##
         v.translate(origin)
+        v.reset()
+        v.panTo(deg)
+        v.translate(origin)
+
         v.pan_angle = 0
         v.tilt_angle = 0
         roi_hull = nav_area.obs_polygon
@@ -80,23 +85,37 @@ class ViewFitnessEvaluator():
             if(frust.point_in_hull(np.array(point))):
                 overlapping_points+=1
         degree_of_overlap = float(overlapping_points)/float(len(vmap.points))
-        print("pan: " + str(frust.pan_angle))
+        #print("pan: " + str(frust.pan_angle))
 
-        print("tilt: " + str(frust.pan_angle))
-        print("overlapping points:" + str(overlapping_points))
-        print("total points: " + str(len(vmap.points)))
-        print("degree: " + str(degree_of_overlap))
+        #print("tilt: " + str(frust.pan_angle))
+        #print("overlapping points:" + str(overlapping_points))
+        #print("total points: " + str(len(vmap.points)))
+        #print("degree: " + str(degree_of_overlap))
 
         # calculate the robot distance of this view from the centroid of the map #
 
-        centroid = vmap.get_centroid()
-        centroid_point = Point(centroid)
+        points_centroid = vmap.get_centroid()
+        frust_centroid = self.get_cent(frust.raw_points)
+        print("points centroid:"+str(points_centroid))
+        print("frust centroid:"+str(frust_centroid))
 
-        cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
-        dist_to_centroid = np.linalg.norm(centroid-cp)
+        #centroid_point = Point(centroid)
+        #cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
 
-        return degree_of_overlap,dist_to_centroid,abs(frust.pan_angle)
 
+        dist_to_centroid = np.linalg.norm(points_centroid-frust_centroid)
+        print(dist_to_centroid)
+
+        return degree_of_overlap,dist_to_centroid
+        #,abs(frust.pan_angle)
+
+    def get_cent(self,arr):
+        arr = np.array(arr)
+        length = arr.shape[0]
+        sum_x = np.sum(arr[:, 0])
+        sum_y = np.sum(arr[:, 1])
+        sum_z = np.sum(arr[:, 2])
+        return sum_x/length, sum_y/length, sum_z/length
 
 
 class VoxelMap():

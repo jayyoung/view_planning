@@ -54,6 +54,7 @@ class ViewSequenceOptimiser():
         self.fitness_evaluator = ViewFitnessEvaluator()
         self.voxel_map = voxel_map
         self.successful_init = True
+        self.tabu_list = []
 
     def generate_view(self):
         dv = RobotViewState()
@@ -61,40 +62,44 @@ class ViewSequenceOptimiser():
         return [frust,robot_pose]
 
     def mutate_pan(self,ind):
-        pan_new = random.randint(-20,20)
+        pan_new = random.randint(-45,45)
         if((ind[0].pan_angle+pan_new) > 45 or (ind[0].pan_angle+pan_new) < -45):
-            return ind
+            return 0
         #print("PANNING WITH: " + str(pan_new))
         #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
-        ind[0].pan(pan_new)
+        #ind[0].panBy(pan_new)
         #if(ind[0].intersects(self.nav_area.obs_polygon)):
-        return ind
+        return ind[0].pan_angle+pan_new
         #else:
         #    ind[0].pan(-pan_new)
         #    return self.mutate_pan(ind)
 
     def mutate_tilt(self,ind):
-        tilt_new = random.randint(-20,20)
+        tilt_new = random.randint(-25,25)
         if((ind[0].tilt_angle+tilt_new) > 45 or (ind[0].tilt_angle+tilt_new) < -45):
-            return ind
+            return 0
         #print("PANNING WITH: " + str(pan_new))
         #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
-        ind[0].tilt(tilt_new)
+        #ind[0].tiltBy(tilt_new)
         #if(ind[0].intersects(self.nav_area.obs_polygon)):
-        return ind
+        return ind[0].tilt_angle+tilt_new
         #else:
         #    ind[0].tilt(-tilt_new)
         #    return self.mutate_tilt(ind)
 
 
     def mutate_view(self,ind):
-        ind = self.mutate_pan(ind)
-        ind = self.mutate_tilt(ind)
+        ind[0].reset()
+        pa = self.mutate_pan(ind)
+        ta = self.mutate_tilt(ind)
+        ind[0].applyPanTilt(pa,ta)
+
+        ind[0].translate(ind[0].position)
         return ind
 
 
     def mutate_pose(self,ind):
-        mutation_intensity = 6
+        mutation_intensity = 4
         nx = ind[1].pose.position.x+random.uniform(-mutation_intensity,mutation_intensity)
         ny = ind[1].pose.position.y+random.uniform(-mutation_intensity,mutation_intensity)
         nz = ind[1].pose.position.z
@@ -128,14 +133,13 @@ class ViewSequenceOptimiser():
 
         #print("SUCCESS!")
         int_frust_pan = ind[0].pan_angle
+        int_frust_tilt = ind[0].tilt_angle
+
         origin = [nx,ny,1.75]
-        width = 0.7
-        height = 0.7
-        length = 2
         ps = geometry_msgs.msg.PoseStamped()
         ps.header.frame_id = "/map"
-        ps.pose.position.x =nx
-        ps.pose.position.y =ny
+        ps.pose.position.x = nx
+        ps.pose.position.y = ny
         ps.pose.position.z = 1.75
 
         qt = geometry_msgs.msg.Quaternion()
@@ -143,32 +147,55 @@ class ViewSequenceOptimiser():
         deg = math.degrees(yaw)
         tlt = 0
 
-        v = ViewFrustum(origin,[origin,
-        (origin[0]+length,origin[1]+width,origin[2]+height),
-        (origin[0]+length,origin[1]+-width,origin[2]+-height),
-        (origin[0]+length,origin[1]+width,origin[2]+-height),
-        (origin[0]+length,origin[1]+(-width),origin[2]+height)])
+        # this is just setting up the new view, not mutating the frustum #
+        v = ViewFrustum()
+        v.translate(origin)
+        v.reset()
 
-        v.pan(deg)
-        v.pan_angle = 0
-        v.tilt_angle = 0
-        v.pan(int_frust_pan)
+        v.panTo(int_frust_pan)
+        v.tiltTo(int_frust_tilt)
 
-        if(v.intersects(self.nav_area.obs_polygon)):
-            pass
-        else:
+        #v.pan_angle = 0
+        #v.tilt_angle = 0
+        #v.pan(int_frust_pan)
+
+        #roi_hull = self.nav_area.obs_polygon
+        #view_hull = Polygon(v.raw_points)
+        #print(view_hull)
+        #if(roi_hull.intersects(view_hull)):
+        #    pass
+        #else:
             #print("init view doesn't intersect the obs polygon")
-            return self.mutate_pose(ind)
+        #    return self.mutate_pose(ind)
 
         q = list(tf.transformations.quaternion_about_axis(yaw, (0,0,1)))
         ps.pose.orientation.x = q[0]
         ps.pose.orientation.y = q[1]
         ps.pose.orientation.z = q[2]
         ps.pose.orientation.w = q[3]
+
+        accept = self.tabu_check(v,ps)
+        if(accept):
+            pass
+        else:
+            return self.mutate_pose(ind)
         # returns the posestamped and the frsutrum polygon #
         ind[0] = v
         ind[1] = ps
+        self.tabu_register(v,ps)
         return ind
+
+    def tabu_check(self,v,ps):
+        for k in self.tabu_list:
+            dist = numpy.linalg.norm(np.array([ps.pose.position.x,ps.pose.position.y,ps.pose.position.z])-
+            np.array([k[1].pose.position.x,k[1].pose.position.y,k[1].pose.position.z]))
+            if(dist < self.nav_generator.inflation_radius):
+                return False
+        return True
+
+
+    def tabu_register(self,v,ps):
+        self.tabu_list.append([v,ps])
 
 
 
@@ -187,10 +214,10 @@ class ViewSequenceOptimiser():
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 25, 100
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 500
 
 
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.5, -0.6))
+        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.3))
         creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
 
@@ -243,7 +270,7 @@ class ViewSequenceOptimiser():
                 if random.random() < MUTPB:
                     #
                     #toolbox.mutate_pose(mutant)
-                    #toolbox.mutate_view(mutant)
+                    toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
 
@@ -265,7 +292,7 @@ class ViewSequenceOptimiser():
                 marker_publisher.publish(ind[0].get_visualisation("blue"))
                 pose_publisher.publish(ind[1])
                 #frust_pose_publisher.publish(ind[0].pose)
-                rospy.sleep(0.1)
+                #rospy.sleep(0.1)
 
             #    print("NEW FITNESS: " + str(fit))
 
@@ -291,6 +318,8 @@ class ViewSequenceOptimiser():
         print("FINAL Best individual parameters: %s" % (best_ind))
         best_frust = best_ind[0]
         print("BEST PAN: "+str(best_frust.pan_angle))
+        print("BEST TILT: "+str(best_frust.tilt_angle))
+
         vmap_cent = vmap.get_centroid()
         print("vmap centroid:"+str(vmap_cent))
         robot_pose = np.asarray([best_ind[1].pose.position.x,best_ind[1].pose.position.y,best_ind[1].pose.position.z])
@@ -310,7 +339,7 @@ class ViewSequenceOptimiser():
             pose_publisher.publish(best_ind[1])
             marker_publisher.publish(best_ind[0].get_visualisation("red"))
             #frust_pose_publisher.publish(best_ind[0].pose)
-            rospy.sleep(0.01)
+            #rospy.sleep(0.1)
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
