@@ -62,8 +62,8 @@ class ViewSequenceOptimiser():
         return [frust,robot_pose]
 
     def mutate_pan(self,ind):
-        pan_new = random.randint(-45,45)
-        if((ind[0].pan_angle+pan_new) > 45 or (ind[0].pan_angle+pan_new) < -45):
+        pan_new = random.randint(-30,30)
+        if((ind[0].pan_angle+pan_new) > 30 or (ind[0].pan_angle+pan_new) < -30):
             return 0
         #print("PANNING WITH: " + str(pan_new))
         #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
@@ -214,7 +214,7 @@ class ViewSequenceOptimiser():
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 500
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 100, 500
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.3))
@@ -319,6 +319,13 @@ class ViewSequenceOptimiser():
         best_frust = best_ind[0]
         print("BEST PAN: "+str(best_frust.pan_angle))
         print("BEST TILT: "+str(best_frust.tilt_angle))
+
+        rospy.Rate(10)
+        print("publishing goal")
+        test_targ_pub = rospy.Publisher('/move_base_simple/goal', geometry_msgs.msg.PoseStamped, queue_size=10)
+        for i in range(5):
+            test_targ_pub.publish(best_ind[1])
+            rospy.sleep(0.1)
 
         vmap_cent = vmap.get_centroid()
         print("vmap centroid:"+str(vmap_cent))

@@ -221,18 +221,16 @@ class ViewFrustum():
         self.reset()
 
     def reset(self):
-        frustum_near = 0.8;
-        frustum_far = 2.5;
-        frustum_angle = 40.5;
-        frustum_ratio = 1.333;
+        frustum_near = 0.8; # 0.8
+        frustum_far = 2.5; # 2.5
+        frustum_angle = 35.5; # 40.5
+        frustum_ratio = 1.333; # 1.333
 
         p = np.array([0.0,0.0,0.0])
         l = np.array([1.0,0.0,0.0])
         u = np.array([0.0,0.0,1.0])
         self.setCamInternals(frustum_angle,frustum_ratio,frustum_near,frustum_far)
         self.setUpPlanesFromPose(p,l,u)
-
-
 
     def point_in_hull(self,pnt):
         '''

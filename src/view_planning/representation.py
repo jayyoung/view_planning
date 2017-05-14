@@ -96,8 +96,8 @@ class ViewFitnessEvaluator():
 
         points_centroid = vmap.get_centroid()
         frust_centroid = self.get_cent(frust.raw_points)
-        print("points centroid:"+str(points_centroid))
-        print("frust centroid:"+str(frust_centroid))
+        #print("points centroid:"+str(points_centroid))
+        #print("frust centroid:"+str(frust_centroid))
 
         #centroid_point = Point(centroid)
         #cp = np.asarray([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z])
