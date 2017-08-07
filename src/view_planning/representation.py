@@ -104,7 +104,7 @@ class ViewFitnessEvaluator():
 
 
         dist_to_centroid = np.linalg.norm(points_centroid-frust_centroid)
-        print(dist_to_centroid)
+        #print("dist:"+str(dist_to_centroid)+" -- overlap:"+str(degree_of_overlap))
 
         return degree_of_overlap,dist_to_centroid
         #,abs(frust.pan_angle)

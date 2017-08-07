@@ -26,6 +26,8 @@ from representation import VoxelMap
 import sys
 from numpy import (array, dot, arccos, clip)
 from numpy.linalg import norm
+import actionlib
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 
 class DummyFitness():
@@ -214,10 +216,10 @@ class ViewSequenceOptimiser():
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 100, 500
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 10, 500
 
 
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -0.3))
+        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
         creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
 
@@ -270,7 +272,7 @@ class ViewSequenceOptimiser():
                 if random.random() < MUTPB:
                     #
                     #toolbox.mutate_pose(mutant)
-                    toolbox.mutate_view(mutant)
+                    #toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
 
@@ -320,12 +322,29 @@ class ViewSequenceOptimiser():
         print("BEST PAN: "+str(best_frust.pan_angle))
         print("BEST TILT: "+str(best_frust.tilt_angle))
 
-        rospy.Rate(10)
         print("publishing goal")
+
+
+        self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         test_targ_pub = rospy.Publisher('/move_base_simple/goal', geometry_msgs.msg.PoseStamped, queue_size=10)
-        for i in range(5):
-            test_targ_pub.publish(best_ind[1])
-            rospy.sleep(0.1)
+        rospy.loginfo("Waiting for move_base action server...")
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = 'map'
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose = best_ind[1].pose
+        #for i in range(5):
+        #    test_targ_pub.publish(best_ind[1])
+        #    rospy.sleep(0.1)
+        self.move_base.wait_for_server(rospy.Duration(60))
+        rospy.loginfo("Connected to move base server")
+        self.move_base.send_goal(goal)
+        rospy.loginfo("Moving robot...")
+        finished_within_time = self.move_base.wait_for_result(rospy.Duration(60))
+        if not finished_within_time:
+            self.move_base.cancel_goal()
+            rospy.loginfo("Timed out achieving goal")
+        else:
+            rospy.loginfo("Goal succeeded!")
 
         vmap_cent = vmap.get_centroid()
         print("vmap centroid:"+str(vmap_cent))
