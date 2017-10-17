@@ -46,6 +46,13 @@ class RobotViewState():
         v.panTo(deg)
         v.translate(origin)
 
+        v.init_pose_orientation_pan = deg
+        v.init_pose_orientation_tilt = tlt
+        
+        v.init_pose_orientation_pan_offset = 0
+        v.init_pose_orientation_tilt_offset = 0
+
+
         v.pan_angle = 0
         v.tilt_angle = 0
         roi_hull = nav_area.obs_polygon

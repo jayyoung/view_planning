@@ -65,43 +65,65 @@ class ViewSequenceOptimiser():
 
     def mutate_pan(self,ind):
         pan_new = random.randint(-30,30)
-        if((ind[0].pan_angle+pan_new) > 30 or (ind[0].pan_angle+pan_new) < -30):
+        if(pan_new > 30 or pan_new < -30):
             return 0
         #print("PANNING WITH: " + str(pan_new))
         #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
         #ind[0].panBy(pan_new)
         #if(ind[0].intersects(self.nav_area.obs_polygon)):
-        return ind[0].pan_angle+pan_new
+        return pan_new
         #else:
         #    ind[0].pan(-pan_new)
         #    return self.mutate_pan(ind)
 
     def mutate_tilt(self,ind):
-        tilt_new = random.randint(-25,25)
-        if((ind[0].tilt_angle+tilt_new) > 45 or (ind[0].tilt_angle+tilt_new) < -45):
+        tilt_new = random.randint(-30,30)
+        if(tilt_new > 40 or tilt_new < -40):
             return 0
-        #print("PANNING WITH: " + str(pan_new))
-        #print("FOR TOTAL: " + str(view[0].pan_angle+pan_new))
-        #ind[0].tiltBy(tilt_new)
-        #if(ind[0].intersects(self.nav_area.obs_polygon)):
-        return ind[0].tilt_angle+tilt_new
-        #else:
-        #    ind[0].tilt(-tilt_new)
-        #    return self.mutate_tilt(ind)
+        return tilt_new
 
 
     def mutate_view(self,ind):
-        ind[0].reset()
+        print("mutating view")
+
+        origin = [ind[1].pose.position.x,ind[1].pose.position.y,ind[1].pose.position.z]
+        #ind[0].translate(origin)
+        #ind[0].reset()
         pa = self.mutate_pan(ind)
         ta = self.mutate_tilt(ind)
-        ind[0].applyPanTilt(pa,ta)
+        #ind[0].applyPanTilt(pa,ta)
+        #ind[0].translate(origin)
 
-        ind[0].translate(ind[0].position)
+        # this is WITHOUT Being translated to the
+        # orientation of the pose yet
+        # this is why we get weird pans like 9 and it's meant to be 45 or something
+        v = ViewFrustum()
+        v.translate(origin)
+        v.reset()
+        #v.panTo(ind[0].init_pose_orientation_pan+pa)
+        v.applyPanTilt(ind[0].init_pose_orientation_pan+pa,ind[0].init_pose_orientation_tilt+ta)
+        v.translate(origin)
+
+    #    v.reset()
+    #    v.panTo(pa)
+    #    v.translate(origin)
+        v.init_pose_orientation_pan = ind[0].init_pose_orientation_pan+pa
+        v.init_pose_orientation_tilt = ind[0].init_pose_orientation_tilt+ta
+
+        v.init_pose_orientation_pan_offset = ind[0].init_pose_orientation_pan_offset+pa
+        v.init_pose_orientation_tilt_offset = ind[0].init_pose_orientation_tilt_offset+ta
+
+
+        ind[0] = v
+
+
         return ind
 
 
     def mutate_pose(self,ind):
+        print("mutating pose")
         mutation_intensity = 4
+        print("old position: " + str(ind[1].pose.position))
         nx = ind[1].pose.position.x+random.uniform(-mutation_intensity,mutation_intensity)
         ny = ind[1].pose.position.y+random.uniform(-mutation_intensity,mutation_intensity)
         nz = ind[1].pose.position.z
@@ -154,11 +176,12 @@ class ViewSequenceOptimiser():
         v.translate(origin)
         v.reset()
 
-        v.panTo(int_frust_pan)
+        v.panTo(deg)
         v.tiltTo(int_frust_tilt)
 
-        #v.pan_angle = 0
-        #v.tilt_angle = 0
+        v.pan_angle = 0
+        v.tilt_angle = 0
+        v.init_pose_orientation_pan = deg
         #v.pan(int_frust_pan)
 
         #roi_hull = self.nav_area.obs_polygon
@@ -185,6 +208,7 @@ class ViewSequenceOptimiser():
         ind[0] = v
         ind[1] = ps
         self.tabu_register(v,ps)
+        print("new position: " + str(ind[1].pose.position))
         return ind
 
     def tabu_check(self,v,ps):
@@ -216,7 +240,7 @@ class ViewSequenceOptimiser():
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 10, 500
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 1, 100
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
@@ -270,9 +294,8 @@ class ViewSequenceOptimiser():
             ###################### MUTATION ######################
             for mutant in offspring:
                 if random.random() < MUTPB:
-                    #
-                    #toolbox.mutate_pose(mutant)
-                    #toolbox.mutate_view(mutant)
+                    toolbox.mutate_pose(mutant)
+                    toolbox.mutate_view(mutant)
                     #print("deleting")
                     del mutant.fitness.values
 
@@ -294,7 +317,7 @@ class ViewSequenceOptimiser():
                 marker_publisher.publish(ind[0].get_visualisation("blue"))
                 pose_publisher.publish(ind[1])
                 #frust_pose_publisher.publish(ind[0].pose)
-                #rospy.sleep(0.1)
+                rospy.sleep(0.1)
 
             #    print("NEW FITNESS: " + str(fit))
 
@@ -319,8 +342,8 @@ class ViewSequenceOptimiser():
         best_ind = tools.selBest(pop, 1)[0]
         print("FINAL Best individual parameters: %s" % (best_ind))
         best_frust = best_ind[0]
-        print("BEST PAN: "+str(best_frust.pan_angle))
-        print("BEST TILT: "+str(best_frust.tilt_angle))
+        print("BEST PAN: "+str(best_frust.init_pose_orientation_pan_offset))
+        print("BEST TILT: "+str(best_frust.init_pose_orientation_tilt_offset))
 
         print("publishing goal")
 
@@ -389,13 +412,24 @@ if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
     vmap = VoxelMap()
-    vmap.generate_dummy([1.121,-1.564,0.9])
-    vmap.generate_dummy([0.845,-2.106,0.9])
-    vmap.generate_dummy([0.845,-1.406,0.9])
+
+    #tum kitchen
+    #vmap.generate_dummy([1.121,-1.564,0.9])
+    #vmap.generate_dummy([0.845,-2.106,0.9])
+    #vmap.generate_dummy([0.845,-1.406,0.9])
+
+    # aloof env
+
+    vmap.generate_dummy([8.78944,3.57644,0.9]) # mouse
+    vmap.generate_dummy([8.96862,3.11941,0.9]) # keyboard
+    vmap.generate_dummy([8.79891,2.58882,0.9]) # mug
+    vmap.generate_dummy([9.2274,3.08814,0.9]) # mug
+
+
     vmap.calc_centroid()
 
 
-    optimiser = ViewSequenceOptimiser(nav_roi="2",obs_roi="1",inflation_radius=0.4,voxel_map=vmap)
+    optimiser = ViewSequenceOptimiser(nav_roi="1",obs_roi="2",inflation_radius=0.4,voxel_map=vmap)
     optimiser.optimise()
 #    while(True):
 #        msg = rospy.wait_for_message("/clicked_point", geometry_msgs.msg.PointStamped , timeout=65.0)

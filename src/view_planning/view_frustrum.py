@@ -216,7 +216,11 @@ class ViewFrustum():
         self.structure = {}
 
         self.pan_angle = 0
+        self.init_pose_orientation_pan = 0
+        self.init_pose_orientation_tilt = 0
 
+        self.init_pose_orientation_pan_offset = 0
+        self.init_pose_orientation_tilt_offset = 0
         self.tilt_angle = 0
         self.reset()
 
@@ -341,7 +345,6 @@ class ViewFrustum():
 
     def panTo(self,angle):
         #self.reset()
-
         r = m3d.Orientation.new_axis_angle([0,0,1],math.radians(angle))
         new_points = []
         for k in self.points:
@@ -394,16 +397,21 @@ class ViewFrustum():
         #self.translate(self.position)
 
     def translate(self,pos):
+        #print("translating to:" + str(pos))
+        #print("cur pos: " + str(self.points))
         if(pos != self.position):
             self.reset()
         self.position = pos
         new_points = []
         for k in self.points:
-            k.x = k.x+pos[0]
-            k.y = k.y+pos[1]
-            k.z = k.z+pos[2]
+            # these are all points relative to an origin, not actually points in space
+            # but when we call this, aren't we MAKING Them points in space?
+            k.x = pos[0]+k.x
+            k.y = pos[1]+k.y
+            k.z = pos[2]+k.z
             new_points.append(np.array([k.x,k.y,k.z]))
         self.raw_points = new_points
+        #print("new pos: " + str(self.points))
 
     def get_visualisation(self,colour="blue"):
         marker1 = Marker()
