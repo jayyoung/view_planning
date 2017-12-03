@@ -28,7 +28,7 @@ from numpy import (array, dot, arccos, clip)
 from numpy.linalg import norm
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-
+import scitos_ptu.msg
 
 class DummyFitness():
     def __init__(self):
@@ -199,7 +199,7 @@ class ViewSequenceOptimiser():
         ps.pose.orientation.z = q[2]
         ps.pose.orientation.w = q[3]
 
-        accept = self.tabu_check(v,ps)
+        accept = self.tabu_check(ps.pose)
         if(accept):
             pass
         else:
@@ -207,21 +207,21 @@ class ViewSequenceOptimiser():
         # returns the posestamped and the frsutrum polygon #
         ind[0] = v
         ind[1] = ps
-        self.tabu_register(v,ps)
+        #self.tabu_register(ps)
         print("new position: " + str(ind[1].pose.position))
         return ind
 
-    def tabu_check(self,v,ps):
+    def tabu_check(self,ps):
         for k in self.tabu_list:
-            dist = numpy.linalg.norm(np.array([ps.pose.position.x,ps.pose.position.y,ps.pose.position.z])-
-            np.array([k[1].pose.position.x,k[1].pose.position.y,k[1].pose.position.z]))
-            if(dist < self.nav_generator.inflation_radius):
+            dist = numpy.linalg.norm(np.array([ps.position.x,ps.position.y,ps.position.z])-
+            np.array([k.position.x,k.position.y,k.position.z]))
+            if(dist < (self.nav_generator.inflation_radius*1.3)):
                 return False
         return True
 
 
-    def tabu_register(self,v,ps):
-        self.tabu_list.append([v,ps])
+    def tabu_register(self,ps):
+        self.tabu_list.append(ps)
 
 
 
@@ -259,6 +259,7 @@ class ViewSequenceOptimiser():
         toolbox.register("select", tools.selBest)
         toolbox.register("mutate_view", self.mutate_view)
         toolbox.register("mutate_pose", self.mutate_pose)
+
         rospy.loginfo("Done")
         rospy.loginfo("Creating initial population and evaluating its fitness")
 
@@ -348,28 +349,11 @@ class ViewSequenceOptimiser():
         print("publishing goal")
 
 
-        self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         test_targ_pub = rospy.Publisher('/move_base_simple/goal', geometry_msgs.msg.PoseStamped, queue_size=10)
         rospy.loginfo("Waiting for move_base action server...")
-        goal = MoveBaseGoal()
-        goal.target_pose.header.frame_id = 'map'
-        goal.target_pose.header.stamp = rospy.Time.now()
-        goal.target_pose.pose = best_ind[1].pose
-        #for i in range(5):
-        #    test_targ_pub.publish(best_ind[1])
-        #    rospy.sleep(0.1)
-        self.move_base.wait_for_server(rospy.Duration(60))
-        rospy.loginfo("Connected to move base server")
-        self.move_base.send_goal(goal)
-        rospy.loginfo("Moving robot...")
-        finished_within_time = self.move_base.wait_for_result(rospy.Duration(60))
-        if not finished_within_time:
-            self.move_base.cancel_goal()
-            rospy.loginfo("Timed out achieving goal")
-        else:
-            rospy.loginfo("Goal succeeded!")
 
         vmap_cent = vmap.get_centroid()
+
         print("vmap centroid:"+str(vmap_cent))
         robot_pose = np.asarray([best_ind[1].pose.position.x,best_ind[1].pose.position.y,best_ind[1].pose.position.z])
         magnitude_vmap = np.sqrt(vmap_cent[0]*vmap_cent[0] + vmap_cent[1]*vmap_cent[1] + vmap_cent[2]*vmap_cent[2])
@@ -390,6 +374,12 @@ class ViewSequenceOptimiser():
             #frust_pose_publisher.publish(best_ind[0].pose)
             #rospy.sleep(0.1)
 
+        #print("BEST PAN: "+str(best_frust.init_pose_orientation_pan_offset))
+        #print("BEST TILT: "+str(best_frust.init_pose_orientation_tilt_offset))
+
+        # robot pose, pan, tilt
+        return best_ind[1].pose,best_frust.init_pose_orientation_pan_offset,best_frust.init_pose_orientation_tilt_offset
+
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / np.linalg.norm(vector)
@@ -408,6 +398,75 @@ def angle_between(v1, v2):
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
+
+class ViewSequenceExecutor():
+    def __init__(self,sequence):
+        self.sequence = sequence
+
+
+    def send_movement_goal(self,pose):
+
+        move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = 'map'
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose = pose
+        move_base.wait_for_server(rospy.Duration(60))
+        rospy.loginfo("Connected to move base server")
+        move_base.send_goal(goal)
+        rospy.loginfo("Moving robot...")
+        finished_within_time = move_base.wait_for_result(rospy.Duration(120))
+        if not finished_within_time:
+            move_base.cancel_goal()
+            rospy.loginfo("Timed out achieving goal")
+        else:
+            rospy.loginfo("Goal succeeded!")
+
+
+    def reset_ptu(self):
+        print("attempting to reset PTU")
+        ptuClient = actionlib.SimpleActionClient('ResetPtu',scitos_ptu.msg.PtuResetAction)
+        ptuClient.wait_for_server()
+        print("sending")
+        goal = scitos_ptu.msg.PtuResetGoal()
+        ptuClient.send_goal(goal)
+        ptuClient.wait_for_result()
+
+    def send_ptu_goal(self,pan,tilt):
+        print("sending ptu goal: " + str(pan) + " : " + str(tilt))
+        ptuClient = actionlib.SimpleActionClient('SetPTUState',scitos_ptu.msg.PtuGotoAction)
+        ptuClient.wait_for_server()
+        print("sending")
+        goal = scitos_ptu.msg.PtuGotoGoal()
+        goal.tilt = tilt
+        goal.tilt_vel = 30
+        goal.pan = pan
+        goal.pan_vel = 30
+        ptuClient.send_goal(goal)
+        ptuClient.wait_for_result()
+
+    def do_perception(self):
+        print("PERCEIVING!")
+        rospy.sleep(10)
+
+
+    def execute(self):
+        print("executing sequence of:" + str(len(self.sequence)) + " views")
+        for view in self.sequence:
+            print("---- VIEW ----")
+            print(view)
+            pose = view[0]
+            pan = view[1]
+            tilt = view[2]
+            self.reset_ptu()
+            self.send_movement_goal(pose)
+            self.send_ptu_goal(pan,tilt)
+            self.do_perception()
+            self.reset_ptu()
+            print("--- COMPLETE ---")
+            rospy.sleep(5)
+
+
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
@@ -417,7 +476,6 @@ if __name__ == '__main__':
     #vmap.generate_dummy([1.121,-1.564,0.9])
     #vmap.generate_dummy([0.845,-2.106,0.9])
     #vmap.generate_dummy([0.845,-1.406,0.9])
-
     # aloof env
 
     vmap.generate_dummy([8.78944,3.57644,0.9]) # mouse
@@ -425,12 +483,20 @@ if __name__ == '__main__':
     vmap.generate_dummy([8.79891,2.58882,0.9]) # mug
     vmap.generate_dummy([9.2274,3.08814,0.9]) # mug
 
-
     vmap.calc_centroid()
 
-
     optimiser = ViewSequenceOptimiser(nav_roi="1",obs_roi="2",inflation_radius=0.4,voxel_map=vmap)
-    optimiser.optimise()
+
+    first_view = optimiser.optimise()
+
+    optimiser.tabu_register(first_view[0])
+
+    second_view = optimiser.optimise()
+
+    executor = ViewSequenceExecutor([first_view,second_view])
+    executor.execute()
+
+
 #    while(True):
 #        msg = rospy.wait_for_message("/clicked_point", geometry_msgs.msg.PointStamped , timeout=65.0)
 #        robot_pose = np.asarray([msg.point.x,msg.point.y])
