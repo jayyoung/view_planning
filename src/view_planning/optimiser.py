@@ -228,7 +228,7 @@ class ViewSequenceOptimiser():
     def evaluate_view(self,individual):
         return self.fitness_evaluator.evaluate(individual,self.voxel_map,self.prior_view)
 
-    def optimise(self,prior_view):
+    def optimise(self,prior_view,vmap):
         if(not self.successful_init):
             rospy.logerr("System is not prepared. Quitting")
             return
@@ -241,7 +241,7 @@ class ViewSequenceOptimiser():
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 25, 250
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 50, 250
 
 
         creator.create("FitnessMulti", base.Fitness, weights=(0.6, -0.6, -1.0))
@@ -465,6 +465,7 @@ class ViewSequenceExecutor():
         print("executing sequence of:" + str(len(self.sequence)) + " views")
         for view in self.sequence:
             print("---- VIEW ----")
+            print("VIEW ANGLE: " + str(view[3]))
             print(view)
             pose = view[0]
             pan = view[1]
@@ -478,36 +479,95 @@ class ViewSequenceExecutor():
             rospy.sleep(5)
 
 
+class ViewSequenceController():
+    def __init__(self,nav_roi_id,observation_roi_id,num_views,target_map):
+        if(target_map is None):
+            # generate a dummy map for debugging
+            self.generate_dummy_target_map()
+        else:
+            self.generate_target_map_from_input(target_map)
+
+        self.optimiser = ViewSequenceOptimiser(nav_roi=nav_roi_id,obs_roi=observation_roi_id,inflation_radius=0.4,voxel_map=self.vmap)
+
+        last_view = None
+        view_sequence = []
+        for view_id in range(num_views):
+            new_view = self.optimiser.optimise(last_view,self.vmap)
+            self.optimiser.tabu_register(new_view[0])
+            last_view = new_view
+            view_sequence.append(new_view)
+
+        view_sequence = self.order_views(view_sequence)
+
+        self.executor = ViewSequenceExecutor(view_sequence)
+        self.executor.execute()
+
+    def order_views(self,views):
+        ns = []
+        for v in views:
+            view_pose = np.asarray([v[0].position.x,v[0].position.y])
+            vmap_cent = np.asarray([self.vmap.get_centroid()[0],self.vmap.get_centroid()[1]])
+            print("VIEW POSE:"+str(view_pose))
+            print("CENT POSE: "+str(vmap_cent))
+            a = angle_between(view_pose,vmap_cent)
+            angle1 = np.rad2deg(a)
+            print("ANGLE IN RADS:"+str(a))
+            l = list(v)
+            l.append(angle1)
+            nv = tuple(l)
+            print("NEW TUPLE:")
+            print(nv)
+            ns.append(nv)
+
+        newviews = sorted(ns, key=lambda x: x[2], reverse=False)
+
+        print("VIEW ORDER:")
+        for k in newviews:
+            print("POSITION:"+str(k[0]))
+            print("ORIENTATION:"+str(k[1]))
+            print("ANGLE:"+str(k[3]))
+
+
+        return newviews
+
+
+    def generate_target_map_from_input(self,map):
+        self.vmap = VoxelMap()
+        # do some things
+        self.vmap.calc_centroid()
+
+    def generate_dummy_target_map(self):
+        self.vmap = VoxelMap()
+        #tum kitchen
+        #self.vmap.generate_dummy([1.121,-1.564,0.9])
+        #self.vmap.generate_dummy([0.845,-2.106,0.9])
+        #self.vmap.generate_dummy([0.845,-1.406,0.9])
+        # aloof env
+        self.vmap.generate_dummy([8.78944,3.57644,0.9]) # mouse
+        self.vmap.generate_dummy([8.96862,3.11941,0.9]) # keyboard
+        self.vmap.generate_dummy([8.79891,2.58882,0.9]) # mug
+        self.vmap.generate_dummy([9.2274,3.08814,0.9]) # mug
+        self.vmap.calc_centroid()
+
+
 if __name__ == '__main__':
     rospy.init_node('sm_test', anonymous = False)
 
-    vmap = VoxelMap()
-
+#    vmap = VoxelMap()
     #tum kitchen
     #vmap.generate_dummy([1.121,-1.564,0.9])
     #vmap.generate_dummy([0.845,-2.106,0.9])
     #vmap.generate_dummy([0.845,-1.406,0.9])
     # aloof env
+#    vmap.generate_dummy([8.78944,3.57644,0.9]) # mouse
+#    vmap.generate_dummy([8.96862,3.11941,0.9]) # keyboard
+#    vmap.generate_dummy([8.79891,2.58882,0.9]) # mug
+#    vmap.generate_dummy([9.2274,3.08814,0.9]) # mug
+#    vmap.calc_centroid()
 
-    vmap.generate_dummy([8.78944,3.57644,0.9]) # mouse
-    vmap.generate_dummy([8.96862,3.11941,0.9]) # keyboard
-    vmap.generate_dummy([8.79891,2.58882,0.9]) # mug
-    vmap.generate_dummy([9.2274,3.08814,0.9]) # mug
+    v = ViewSequenceController("1","2",3,None)
 
-    vmap.calc_centroid()
 
-    optimiser = ViewSequenceOptimiser(nav_roi="1",obs_roi="2",inflation_radius=0.4,voxel_map=vmap)
-
-    first_view = optimiser.optimise(None)
-
-    optimiser.tabu_register(first_view[0])
-
-    second_view = optimiser.optimise(first_view)
-
-    optimiser.tabu_register(second_view[0])
-
-    executor = ViewSequenceExecutor([first_view,second_view])
-    executor.execute()
 
 
 #    while(True):
