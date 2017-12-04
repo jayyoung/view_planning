@@ -16,7 +16,7 @@ from deap import tools
 from deap import algorithms
 from nav_areas import *
 from view_frustrum import *
-from random import randint
+from random import randint,shuffle
 import tf
 import math
 import copy
@@ -207,15 +207,14 @@ class ViewSequenceOptimiser():
         # returns the posestamped and the frsutrum polygon #
         ind[0] = v
         ind[1] = ps
-        #self.tabu_register(ps)
         print("new position: " + str(ind[1].pose.position))
         return ind
 
     def tabu_check(self,ps):
         for k in self.tabu_list:
-            dist = numpy.linalg.norm(np.array([ps.position.x,ps.position.y,ps.position.z])-
-            np.array([k.position.x,k.position.y,k.position.z]))
-            if(dist < (self.nav_generator.inflation_radius*1.5)):
+            dist = numpy.linalg.norm(np.array([ps.position.x,ps.position.y])-
+            np.array([k.position.x,k.position.y]))
+            if(dist < (self.nav_generator.inflation_radius)*1.5):
                 return False
         return True
 
@@ -465,7 +464,7 @@ class ViewSequenceExecutor():
         print("executing sequence of:" + str(len(self.sequence)) + " views")
         for view in self.sequence:
             print("---- VIEW ----")
-            print("VIEW ANGLE: " + str(view[3]))
+            #print("VIEW ANGLE: " + str(view[3]))
             print(view)
             pose = view[0]
             pan = view[1]
@@ -497,12 +496,52 @@ class ViewSequenceController():
             last_view = new_view
             view_sequence.append(new_view)
 
-        view_sequence = self.order_views(view_sequence)
+        view_sequence = self.order_view_by_distance_travelled(view_sequence)
 
         self.executor = ViewSequenceExecutor(view_sequence)
         self.executor.execute()
 
-    def order_views(self,views):
+
+    def trav_dist(self,a,b):
+            print("TRAV DIST:")
+            print(a)
+            dist = numpy.linalg.norm(np.array([a[0].position.x,a[0].position.y])-np.array([b[0].position.x,b[0].position.y]))
+            print("DISTANCE:" + str(dist))
+            return dist
+
+    def measure_dist_travelled(self,candidate_views):
+        a_to_b = self.trav_dist(candidate_views[0],candidate_views[1])
+        b_to_c = self.trav_dist(candidate_views[1],candidate_views[2])
+        return a_to_b+b_to_c
+
+
+        #
+        # this is a giant hack but i have to leave in 10 minutes so lets
+        # just see if it works and then fix it up later.
+        # TODO: MAKE THIS BETTER
+        #
+    def order_view_by_distance_travelled(self,views):
+        tabu = []
+        best_permutation = None
+        best_perm_val = 100000
+        permuted_views = views
+        print("ORDERING THESE VIEWS BY DIST")
+        print(views[0])
+        print("READY!")
+        for i in range(100):
+            random.shuffle(permuted_views)
+            print("PERMUTED:")
+            print(permuted_views)
+            if(permuted_views in tabu):
+                continue
+            tabu.append(permuted_views)
+            perm_val = self.measure_dist_travelled(permuted_views)
+            if(perm_val < best_perm_val):
+                best_perm_val = perm_val
+                best_permutation = permuted_views
+        return best_permutation
+
+    def order_views_by_angle(self,views):
         ns = []
         for v in views:
             view_pose = np.asarray([v[0].position.x,v[0].position.y])
@@ -513,7 +552,7 @@ class ViewSequenceController():
             angle1 = np.rad2deg(a)
             print("ANGLE IN RADS:"+str(a))
             l = list(v)
-            l.append(angle1)
+            l.append(a)
             nv = tuple(l)
             print("NEW TUPLE:")
             print(nv)
@@ -526,7 +565,6 @@ class ViewSequenceController():
             print("POSITION:"+str(k[0]))
             print("ORIENTATION:"+str(k[1]))
             print("ANGLE:"+str(k[3]))
-
 
         return newviews
 
