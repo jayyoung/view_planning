@@ -215,7 +215,7 @@ class ViewSequenceOptimiser():
         for k in self.tabu_list:
             dist = numpy.linalg.norm(np.array([ps.position.x,ps.position.y,ps.position.z])-
             np.array([k.position.x,k.position.y,k.position.z]))
-            if(dist < (self.nav_generator.inflation_radius*1.3)):
+            if(dist < (self.nav_generator.inflation_radius*1.5)):
                 return False
         return True
 
@@ -226,24 +226,25 @@ class ViewSequenceOptimiser():
 
 
     def evaluate_view(self,individual):
-        return self.fitness_evaluator.evaluate(individual,self.voxel_map)
+        return self.fitness_evaluator.evaluate(individual,self.voxel_map,self.prior_view)
 
-    def optimise(self):
+    def optimise(self,prior_view):
         if(not self.successful_init):
             rospy.logerr("System is not prepared. Quitting")
             return
         target_points_publisher = rospy.Publisher("/view_points", Marker,queue_size=5)
         target_points_publisher.publish(self.voxel_map.get_visualisation())
+        self.prior_view = prior_view
 
         marker_publisher = rospy.Publisher("/view_planner/candidate_frustrum_geometry", Marker,queue_size=5)
         pose_publisher = rospy.Publisher("/view_planner/candidate_robot_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
         #frust_pose_publisher = rospy.Publisher("/view_planner/candidate_frustrum_pose", geometry_msgs.msg.PoseStamped,queue_size=5)
 
         rospy.loginfo("Beginning Genetic Planning")
-        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 1, 100
+        CXPB, MUTPB, NGEN, POPSIZE = 0.5, 0.2, 25, 250
 
 
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
+        creator.create("FitnessMulti", base.Fitness, weights=(0.6, -0.6, -1.0))
         creator.create("Individual", ViewIndividual, fitness=creator.FitnessMulti)
 
 
@@ -318,7 +319,7 @@ class ViewSequenceOptimiser():
                 marker_publisher.publish(ind[0].get_visualisation("blue"))
                 pose_publisher.publish(ind[1])
                 #frust_pose_publisher.publish(ind[0].pose)
-                rospy.sleep(0.1)
+                #rospy.sleep(0.1)
 
             #    print("NEW FITNESS: " + str(fit))
 
@@ -433,6 +434,16 @@ class ViewSequenceExecutor():
         ptuClient.wait_for_result()
 
     def send_ptu_goal(self,pan,tilt):
+
+        #
+        #
+        # DEBUG, REMOVE LATER
+        #
+        if(tilt > 40):
+            tilt = 40
+        #
+        # DEBUG, REMOVE LATER
+        #
         print("sending ptu goal: " + str(pan) + " : " + str(tilt))
         ptuClient = actionlib.SimpleActionClient('SetPTUState',scitos_ptu.msg.PtuGotoAction)
         ptuClient.wait_for_server()
@@ -487,11 +498,13 @@ if __name__ == '__main__':
 
     optimiser = ViewSequenceOptimiser(nav_roi="1",obs_roi="2",inflation_radius=0.4,voxel_map=vmap)
 
-    first_view = optimiser.optimise()
+    first_view = optimiser.optimise(None)
 
     optimiser.tabu_register(first_view[0])
 
-    second_view = optimiser.optimise()
+    second_view = optimiser.optimise(first_view)
+
+    optimiser.tabu_register(second_view[0])
 
     executor = ViewSequenceExecutor([first_view,second_view])
     executor.execute()

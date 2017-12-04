@@ -48,7 +48,7 @@ class RobotViewState():
 
         v.init_pose_orientation_pan = deg
         v.init_pose_orientation_tilt = tlt
-        
+
         v.init_pose_orientation_pan_offset = 0
         v.init_pose_orientation_tilt_offset = 0
 
@@ -82,7 +82,7 @@ class ViewFitnessEvaluator():
         # other things? like if the view is in a tabu region?
 
         pass
-    def evaluate(self,view,vmap):
+    def evaluate(self,view,vmap,prior_view):
         # calculate how well this view overlaps the points in the map #
         frust = view[0]
         pose = view[1]
@@ -113,7 +113,15 @@ class ViewFitnessEvaluator():
         dist_to_centroid = np.linalg.norm(points_centroid-frust_centroid)
         #print("dist:"+str(dist_to_centroid)+" -- overlap:"+str(degree_of_overlap))
 
-        return degree_of_overlap,dist_to_centroid
+        dist_to_prior_view = 0
+        if(prior_view is not None):
+            print("PRIOR VIEW:")
+            print(prior_view[0])
+            prior_view = prior_view[0]
+            dist_to_prior_view = numpy.linalg.norm(np.array([prior_view.position.x,prior_view.position.y,prior_view.position.z])
+            -np.array([pose.pose.position.x,pose.pose.position.y,pose.pose.position.z]))
+
+        return degree_of_overlap,dist_to_centroid,dist_to_prior_view
         #,abs(frust.pan_angle)
 
     def get_cent(self,arr):
